@@ -311,6 +311,46 @@ describe('Storyboard with mock GitHub', () => {
     assert.equal(patched.title, '[Storyboard] acme/epic');
   });
 
+  it('reuses and reopens a closed epic instead of creating a second one', async () => {
+    const repo = 'acme/epic-closed';
+    tasks.create({ repo, title: 'Closed epic task', status: 'ready' });
+    const first = await storyboard.syncEpic(repo);
+    await client.patch(`/repos/${repo}/issues/${first.number}`, { state: 'closed' });
+
+    const second = await storyboard.syncEpic(repo);
+    assert.equal(second.number, first.number);
+    assert.equal((await getIssue(repo, first.number)).state, 'open');
+    const all = (await client.get(`/repos/${repo}/issues`, { query: { state: 'all' } })).data;
+    const epics = all.filter((issue) => issue.title === `[Storyboard] ${repo}`);
+    assert.equal(epics.length, 1, 'a closed epic must be reused, not duplicated');
+  });
+
+  it('closes duplicate storyboard epics and keeps the oldest', async () => {
+    const repo = 'acme/epic-dupes';
+    await createIssue(repo, { title: `[Storyboard] ${repo}`, body: 'duplicate one', labels: ['gos:epic'] });
+    await createIssue(repo, { title: `[Storyboard] ${repo}`, body: 'duplicate two', labels: ['gos:epic'] });
+    tasks.create({ repo, title: 'Dedupe task', status: 'ready' });
+
+    const result = await storyboard.syncEpic(repo);
+    const all = (await client.get(`/repos/${repo}/issues`, { query: { state: 'all' } })).data;
+    const epics = all.filter((issue) => issue.title === `[Storyboard] ${repo}`);
+    assert.equal(epics.length, 2);
+    assert.equal(result.number, Math.min(...epics.map((issue) => issue.number)));
+    const open = epics.filter((issue) => issue.state === 'open');
+    assert.equal(open.length, 1, 'only one storyboard epic stays open');
+    assert.equal(open[0].number, result.number);
+  });
+
+  it('serializes concurrent epic syncs into a single issue', async () => {
+    const repo = 'acme/epic-race';
+    tasks.create({ repo, title: 'Race task', status: 'ready' });
+    const [left, right] = await Promise.all([storyboard.syncEpic(repo), storyboard.syncEpic(repo)]);
+    assert.equal(left.number, right.number);
+    const all = (await client.get(`/repos/${repo}/issues`, { query: { state: 'all' } })).data;
+    const epics = all.filter((issue) => issue.title === `[Storyboard] ${repo}`);
+    assert.equal(epics.length, 1, 'concurrent syncs must create exactly one epic');
+  });
+
   it('syncTask persists issue and epic numbers on the task', async () => {
     const repo = 'acme/sync';
     const task = tasks.create({ repo, title: 'Sync me', status: 'ready' });

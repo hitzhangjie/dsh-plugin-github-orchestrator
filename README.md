@@ -25,7 +25,8 @@ workbench:
    main clone, then remove the worktree, delete the branch, close the task and
    update the storyboard.
 6. **Keep a storyboard in GitHub issues** — every task is mirrored to an issue;
-   a per-repository epic issue is regenerated with the task table and status
+   a single per-repository epic issue is reused (even when closed), reconciled
+   with the task table and status counts, and duplicate epics are closed
    counts. The local task store is the fast cache, GitHub issues are the durable
    shared memory.
 
@@ -304,7 +305,9 @@ Add `closeTasks=true` to also close the matching tasks and issues.
   (`<!-- github-orchestrator:task ... -->`) followed by summary, branch,
   worktree, base branch and the note timeline. It is regenerated on every
   `github_tasks action=update|sync`.
-- Epic issue title: `[Storyboard] owner/name`; label `gos:epic`. It contains the
+- Epic issue title: `[Storyboard] owner/name`; label `gos:epic`. It is reused
+  even when closed, concurrent syncs are serialized per repository, and any
+  duplicate epics found are closed automatically. It contains the
   generated timestamp, status counts and a task table linking every task issue
   and branch.
 - `github_tasks action=bootstrap repo=...` creates the epic and imports existing
@@ -387,7 +390,7 @@ re-imported from issue meta blocks with `github_tasks action=import`.
 
 ## Verification
 
-`node --test "test/**/*.test.js"` runs **231 tests** covering the Git engine,
+`node --test "test/**/*.test.js"` runs **234 tests** covering the Git engine,
 token-authenticated Git, GitHub client, issue/PR listing, OAuth device flow,
 event poller, auto-dispatch engine, task store, storyboard, the tool layer, the
 Host web API and integration scenarios offline (temp repositories, an
