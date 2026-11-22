@@ -82,6 +82,11 @@ The sidebar panel contains:
   After approving, press *I authorized, continue*; the token is stored in the
   credentials service and the panel switches to the signed-in state. *Sign out*
   deletes the stored credential.
+- **Right-side Agent chat** — the floating *Agent chat* button at the bottom-right
+  opens a docked chat bound to the always-on watcher session: recent messages and
+  tool calls, running/idle state, a composer to dispatch work, and *open in main
+  view*. It is also reachable from the dispatch card's *Dispatch in the
+  right-side chat* button.
 - **Inbox** — unread events with kind chips, repository, branch/PR/issue links
   and the linked task id; mark one or all as read.
 - **Issues/PRs** — the current open/closed issue and pull-request backlog (not
@@ -118,13 +123,13 @@ the GitHub/worktree/storyboard tools. There are two ways to put it to work:
    `git_sync` itself. This is the most flexible path, and the same session can
    keep steering the work.
 
-2. **Panel → “派任务给 Agent”** — type the task in the dispatch card and click
-   **新建会话并派单**. The panel creates a new DSH session with the plugin
-   workspace as its working directory, sends the text as the first user
-   message, and switches to that session so you can watch the agent work. If a
-   deployment does not expose the client session service, the panel falls back
-   to opening a new session with the task pre-filled in the composer draft —
-   press Send there.
+2. **Panel → “派任务给 Agent” / right-side chat** — the dispatch card can open
+   the **right-side Agent chat** (or use the floating “Agent chat” button at the
+   bottom-right of the window). That chat is bound to the persistent watcher
+   session: it shows the watcher's recent messages and tool calls, and every
+   message you send there is delivered to the same always-on agent — it creates
+   the watcher session on first use. *Open in main view* jumps to the full
+   conversation whenever you want the complete transcript.
 
 Both paths use the same tools and state (event inbox, tasks, storyboard), so a
 task dispatched from the panel is the same task you can follow from the chat
@@ -378,7 +383,7 @@ re-imported from issue meta blocks with `github_tasks action=import`.
 
 ## Verification
 
-`node --test "test/**/*.test.js"` runs **231 tests** covering the Git engine,
+`node --test "test/**/*.test.js"` runs **232 tests** covering the Git engine,
 token-authenticated Git, GitHub client, issue/PR listing, OAuth device flow,
 event poller, auto-dispatch engine, task store, storyboard, the tool layer, the
 Host web API and integration scenarios offline (temp repositories, an

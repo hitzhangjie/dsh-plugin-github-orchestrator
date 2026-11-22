@@ -355,6 +355,28 @@ window.__ModuleLoader__.load({
           unavailable: '当前 Harness 没有提供会话服务，暂时无法自动派单；请把上面的文字粘贴到主聊天窗口。',
           failed: '派单失败',
         },
+        chat: {
+          title: 'GitHub Agent',
+          subtitle: '常驻 watcher 会话：事件自动派单与手动聊天都在这里',
+          open: 'Agent 聊天',
+          close: '收起聊天',
+          placeholder: '给 Agent 派任务，例如：看一下 PR #139，按故事板流程实现、rebase、merge 并清理…',
+          send: '发送',
+          sending: '发送中…',
+          empty: '还没有消息。发送第一条任务后，watcher 会在这里持续工作。',
+          loading: '正在连接 watcher 会话…',
+          noSession: '发送第一条任务即创建常驻 Agent 会话。',
+          openSession: '在主界面打开',
+          running: 'Agent 工作中',
+          idle: 'Agent 空闲',
+          error: '聊天连接失败',
+          historyHint: '仅显示最近的消息',
+          dispatchToChat: '在右侧聊天中派单',
+          roleUser: '你',
+          roleAgent: 'Agent',
+          roleTool: '工具调用',
+          roleResult: '工具结果',
+        },
         footer: {
           route: (route) => `接口：${route}`,
           generated: (time) => `快照生成于 ${time}`,
@@ -668,6 +690,28 @@ window.__ModuleLoader__.load({
           empty: 'Enter a task description first.',
           unavailable: 'This Harness exposes no session service, so automatic dispatch is unavailable; paste the text into the main chat instead.',
           failed: 'Dispatch failed',
+        },
+        chat: {
+          title: 'GitHub Agent',
+          subtitle: 'The always-on watcher session: auto-dispatched events and manual chat live here',
+          open: 'Agent chat',
+          close: 'Hide chat',
+          placeholder: 'Assign work, e.g. review PR #139, implement it, rebase, merge and clean up…',
+          send: 'Send',
+          sending: 'Sending…',
+          empty: 'No messages yet. Send the first task and the watcher keeps working here.',
+          loading: 'Connecting to the watcher session…',
+          noSession: 'Sending the first task creates the persistent agent session.',
+          openSession: 'Open in main view',
+          running: 'Agent working',
+          idle: 'Agent idle',
+          error: 'Chat connection failed',
+          historyHint: 'Showing recent messages only',
+          dispatchToChat: 'Dispatch in the right-side chat',
+          roleUser: 'You',
+          roleAgent: 'Agent',
+          roleTool: 'Tool call',
+          roleResult: 'Tool result',
         },
         footer: {
           route: (route) => `API: ${route}`,
@@ -1358,6 +1402,33 @@ window.__ModuleLoader__.load({
       '.go-statusline{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dsw-alias-label-secondary)}',
       '.go-watcher{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}',
       '.go-watcher code{background:var(--dsw-alias-bg-layer-2);padding:1px 6px;border-radius:5px;font-size:11.5px;overflow-wrap:anywhere}',
+      '.go-chat-fab{position:fixed;right:18px;bottom:26px;z-index:55;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-brand-primary);font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.18)}',
+      '.go-chat-fab:hover{background:var(--dsw-alias-bg-layer-2)}',
+      '.go-chat{position:fixed;top:0;right:0;bottom:0;width:min(420px,94vw);z-index:56;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base);border-left:1px solid var(--dsw-alias-border-l1);box-shadow:-8px 0 24px rgba(0,0,0,.18);font-size:13.5px}',
+      '.go-chat-head{flex:none;display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.go-chat-head-main{flex:1;min-width:0}',
+      '.go-chat-title{font-size:14px;font-weight:650}',
+      '.go-chat-sub{font-size:11.5px;color:var(--dsw-alias-label-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.go-chat-head-actions{display:flex;align-items:center;gap:6px;flex:none}',
+      '.go-chat-state{font-size:11px;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}',
+      '.go-chat-state::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-idle-primary)}',
+      '.go-chat-state.is-running{color:var(--dsw-alias-state-success-primary)}',
+      '.go-chat-state.is-running::before{background:var(--dsw-alias-state-success-primary);animation:go-pulse 1.2s ease-in-out infinite}',
+      '@keyframes go-pulse{50%{opacity:.35}}',
+      '.go-chat-iconbtn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;background:transparent;border-radius:7px;color:var(--dsw-alias-label-secondary);cursor:pointer;font-size:16px;line-height:1}',
+      '.go-chat-iconbtn:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}',
+      '.go-chat-body{flex:1;min-height:0;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}',
+      '.go-chat-note{font-size:12px;color:var(--dsw-alias-label-secondary);line-height:1.6}',
+      '.go-chat-msg{max-width:92%;border-radius:10px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);min-width:0}',
+      '.go-chat-user{align-self:flex-end;background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-border-l2)}',
+      '.go-chat-assistant{align-self:flex-start}',
+      '.go-chat-tool,.go-chat-result{align-self:stretch;background:var(--dsw-alias-bg-layer-1);border-style:dashed;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.go-chat-role{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dsw-alias-label-secondary);margin-bottom:3px}',
+      '.go-chat-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}',
+      '.go-chat-compose{flex:none;border-top:1px solid var(--dsw-alias-border-l1);padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px}',
+      '.go-chat-input{width:100%;box-sizing:border-box;min-height:64px;max-height:180px;resize:vertical;border-radius:9px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.45;padding:8px 10px;outline:none}',
+      '.go-chat-input:focus{border-color:var(--dsw-alias-brand-primary)}',
+      '.go-chat-compose-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}',
       '.go-footer{flex:none;padding:10px 24px 14px;font-size:11.5px;color:var(--dsw-alias-label-secondary);border-top:1px solid var(--dsw-alias-border-l1);display:flex;gap:16px;flex-wrap:wrap}',
       '.go-footer code{background:var(--dsw-alias-bg-layer-2);padding:1px 5px;border-radius:5px;font-size:11px;overflow-wrap:anywhere}',
       '@media (max-width:860px){.go-head,.go-tabs,.go-body{padding-left:14px;padding-right:14px}.go-auth{margin-left:14px;margin-right:14px}.go-dispatch{margin-left:14px;margin-right:14px}.go-banner{margin-left:14px;margin-right:14px}}',
@@ -1413,6 +1484,12 @@ window.__ModuleLoader__.load({
         h('path', { key: 'a', d: 'M4.8 7.2h14.4' }),
         h('path', { key: 'b', d: 'M9.2 7.2V5.4a1.2 1.2 0 0 1 1.2-1.2h3.2a1.2 1.2 0 0 1 1.2 1.2v1.8' }),
         h('path', { key: 'c', d: 'M6.4 7.2 7.3 19a1.4 1.4 0 0 0 1.4 1.3h6.6a1.4 1.4 0 0 0 1.4-1.3l.9-11.8' }),
+      ]);
+    const IconChat = (size = 16) =>
+      icon(size, [
+        h('path', { key: 'a', d: 'M4.2 5.4h15.6v9.2H9.2l-5 4.2V5.4Z' }),
+        h('path', { key: 'b', d: 'M8 8.8h8' }),
+        h('path', { key: 'c', d: 'M8 11.6h5.2' }),
       ]);
 
     /** @param {{ size?: number, active?: boolean }} props */
@@ -1574,6 +1651,326 @@ window.__ModuleLoader__.load({
         /* popup blocked */
       }
       return false;
+    }
+
+    // ---------------------------------------------------------------------
+    // Right-side Agent chat (overlay) — the always-on watcher conversation
+    // ---------------------------------------------------------------------
+
+    /** Shared open/draft state between the panel launcher and the right chat. */
+    const chatWindowState = { open: false, draft: '', listeners: new Set() };
+
+    function notifyChatWindow() {
+      for (const listener of [...chatWindowState.listeners]) {
+        try {
+          listener();
+        } catch {
+          /* a broken listener must not block the others */
+        }
+      }
+    }
+
+    /** @param {string} [draft] */
+    function openChatWindow(draft) {
+      chatWindowState.open = true;
+      if (typeof draft === 'string') chatWindowState.draft = draft;
+      notifyChatWindow();
+    }
+
+    function closeChatWindow() {
+      chatWindowState.open = false;
+      notifyChatWindow();
+    }
+
+    function useChatWindowState() {
+      const [, bump] = useState(0);
+      useEffect(() => {
+        const listener = () => bump((value) => value + 1);
+        chatWindowState.listeners.add(listener);
+        return () => {
+          chatWindowState.listeners.delete(listener);
+        };
+      }, []);
+      return chatWindowState;
+    }
+
+    /** @param {unknown} content */
+    function textFromContent(content) {
+      if (!Array.isArray(content)) return '';
+      return content
+        .filter((block) => block && block.type === 'text' && typeof block.text === 'string')
+        .map((block) => block.text)
+        .join('\n')
+        .trim();
+    }
+
+    /** @param {string} value @param {number} max */
+    function shortText(value, max) {
+      const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+      return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+    }
+
+    /** @param {any} windowState */
+    function deriveChatMessages(windowState) {
+      const entries = windowState && Array.isArray(windowState.entries) ? windowState.entries : [];
+      const messages = [];
+      for (const entry of entries) {
+        if (!entry || entry.type !== 'event') continue;
+        const event = entry.event || {};
+        const data = event.data || {};
+        const key = `${event.type}-${event.seq}`;
+        if (event.type === 'user/message') {
+          const text = textFromContent(data.content);
+          if (text) messages.push({ key, role: 'user', text, time: event.time });
+        } else if (event.type === 'assistant/message') {
+          const text = textFromContent(data.message && data.message.content);
+          if (text) messages.push({ key, role: 'assistant', text, time: event.time });
+        } else if (event.type === 'tool/call') {
+          messages.push({ key, role: 'tool', text: `${data.name || 'tool'} ${shortText(data.arguments, 140)}`, time: event.time });
+        } else if (event.type === 'tool/result') {
+          const text = textFromContent(data.message && data.message.content);
+          if (text) messages.push({ key, role: 'result', text: shortText(text, 260), time: event.time });
+        }
+      }
+      return messages.slice(-80);
+    }
+
+    /**
+     * Right-column chat over the persistent watcher session. Sending goes
+     * through github_dispatch action=send so the Host creates/resumes the
+     * watcher agent; history is read through the client session service.
+     */
+    function GitHubAgentChat(props) {
+      const { t, services } = props;
+      const chat = useChatWindowState();
+      const [sessionId, setSessionId] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [running, setRunning] = useState(false);
+      const [draft, setDraft] = useState('');
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const listRef = useRef(null);
+
+      useEffect(() => {
+        if (!chat.open) return undefined;
+        setDraft(chatWindowState.draft || '');
+        chatWindowState.draft = '';
+        setError(null);
+        setLoading(true);
+        let cancelled = false;
+        requestJson('/status')
+          .then((data) => {
+            if (cancelled) return;
+            const snapshot = normalizeSnapshot(data);
+            setSessionId(snapshot.dispatch.sessionId || null);
+            setLoading(false);
+          })
+          .catch((caught) => {
+            if (cancelled) return;
+            setLoading(false);
+            setError(messageOf(caught));
+          });
+        return () => {
+          cancelled = true;
+        };
+      }, [chat.open]);
+
+      useEffect(() => {
+        if (!chat.open) return undefined;
+        const timer = setInterval(() => {
+          requestJson('/status')
+            .then((data) => {
+              const snapshot = normalizeSnapshot(data);
+              if (snapshot.dispatch.sessionId) setSessionId(snapshot.dispatch.sessionId);
+            })
+            .catch(() => {});
+        }, 10000);
+        return () => clearInterval(timer);
+      }, [chat.open]);
+
+      useEffect(() => {
+        if (!chat.open || !sessionId) {
+          setMessages([]);
+          return undefined;
+        }
+        const sessions = services && services.sessions;
+        if (!sessions || typeof sessions.retain !== 'function') {
+          setError(t.chat.error);
+          return undefined;
+        }
+        let cancelled = false;
+        let reference = null;
+        const unsubscribes = [];
+        try {
+          reference = sessions.retain(sessionId, { source: 'controllerOperation' });
+        } catch (caught) {
+          setError(messageOf(caught));
+          return undefined;
+        }
+        reference.ready
+          .then((binding) => {
+            if (cancelled) return;
+            const session = binding.session;
+            const source = binding.eventSource;
+            const read = () => {
+              try {
+                setMessages(deriveChatMessages(source.getSnapshot()));
+              } catch {
+                /* transient window state */
+              }
+              try {
+                const snapshot = session.getSnapshot();
+                setRunning(Boolean(snapshot && snapshot.running));
+              } catch {
+                /* snapshot may be unavailable while loading */
+              }
+            };
+            read();
+            if (source && typeof source.subscribe === 'function') unsubscribes.push(source.subscribe(read));
+            if (session && typeof session.subscribe === 'function') unsubscribes.push(session.subscribe(read));
+          })
+          .catch((caught) => {
+            if (!cancelled) setError(messageOf(caught));
+          });
+        return () => {
+          cancelled = true;
+          for (const unsubscribe of unsubscribes) {
+            try {
+              unsubscribe();
+            } catch {
+              /* already disposed */
+            }
+          }
+          try {
+            if (reference && typeof reference.release === 'function') reference.release();
+          } catch {
+            /* already disposed */
+          }
+        };
+      }, [chat.open, sessionId, services, t.chat.error]);
+
+      useEffect(() => {
+        const element = listRef.current;
+        if (element) element.scrollTop = element.scrollHeight;
+      }, [messages, chat.open]);
+
+      const send = useCallback(async () => {
+        const text = draft.trim();
+        if (!text || busy) return;
+        setBusy(true);
+        setError(null);
+        try {
+          const result = await callTool('github_dispatch', { action: 'send', text });
+          if (result && result.sessionId) setSessionId(result.sessionId);
+          setDraft('');
+        } catch (caught) {
+          setError(messageOf(caught));
+        } finally {
+          setBusy(false);
+        }
+      }, [draft, busy]);
+
+      if (!chat.open) {
+        return h(
+          'button',
+          {
+            type: 'button',
+            className: 'go-chat-fab',
+            title: t.chat.open,
+            'aria-label': t.chat.open,
+            onClick: () => openChatWindow(),
+          },
+          IconChat(18),
+          h('span', null, t.chat.open),
+        );
+      }
+
+      const roleLabel = (role) => {
+        if (role === 'user') return t.chat.roleUser;
+        if (role === 'assistant') return t.chat.roleAgent;
+        if (role === 'tool') return t.chat.roleTool;
+        return t.chat.roleResult;
+      };
+
+      return h(
+        'aside',
+        { className: 'go-chat', 'aria-label': t.chat.title },
+        h(
+          'header',
+          { className: 'go-chat-head' },
+          h(
+            'div',
+            { className: 'go-chat-head-main' },
+            h('div', { className: 'go-chat-title' }, t.chat.title),
+            h('div', { className: 'go-chat-sub' }, t.chat.subtitle),
+          ),
+          h(
+            'div',
+            { className: 'go-chat-head-actions' },
+            h('span', { className: running ? 'go-chat-state is-running' : 'go-chat-state' }, running ? t.chat.running : t.chat.idle),
+            sessionId && services && services.uiWorkspace
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'go-chat-iconbtn',
+                    title: t.chat.openSession,
+                    onClick: () => services.uiWorkspace.openSession(sessionId),
+                  },
+                  '↗',
+                )
+              : null,
+            h('button', { type: 'button', className: 'go-chat-iconbtn', title: t.chat.close, onClick: closeChatWindow }, '×'),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'go-chat-body', ref: listRef },
+          loading ? h('div', { className: 'go-chat-note' }, t.chat.loading) : null,
+          error ? h('div', { className: 'go-inline-error' }, error) : null,
+          messages.length === 0 && !loading
+            ? h('div', { className: 'go-chat-note' }, sessionId ? t.chat.empty : t.chat.noSession)
+            : null,
+          messages.map((message) =>
+            h(
+              'div',
+              { key: message.key, className: `go-chat-msg go-chat-${message.role}` },
+              h('div', { className: 'go-chat-role' }, roleLabel(message.role)),
+              h('div', { className: 'go-chat-text' }, message.text),
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'go-chat-compose' },
+          h('textarea', {
+            className: 'go-chat-input',
+            rows: 3,
+            value: draft,
+            placeholder: t.chat.placeholder,
+            'aria-label': t.chat.placeholder,
+            onChange: (event) => setDraft(event.target.value),
+            onKeyDown: (event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                void send();
+              }
+            },
+          }),
+          h(
+            'div',
+            { className: 'go-chat-compose-row' },
+            h('span', { className: 'go-chat-note' }, t.chat.historyHint),
+            h(Button, {
+              label: busy ? t.chat.sending : t.chat.send,
+              primary: true,
+              onClick: () => void send(),
+              disabled: busy || draft.trim().length === 0,
+            }),
+          ),
+        ),
+      );
     }
 
     // ---------------------------------------------------------------------
@@ -2579,6 +2976,11 @@ window.__ModuleLoader__.load({
             onClick: () => void dispatchTask(),
             disabled: busy !== '',
           }),
+          h(Button, {
+            label: t.chat.dispatchToChat,
+            icon: IconChat(14),
+            onClick: () => openChatWindow(dispatchDraft),
+          }),
           h('span', { className: 'go-auth-sub' }, t.dispatch.sessionHint),
         ),
       );
@@ -3411,6 +3813,21 @@ window.__ModuleLoader__.load({
             const localeId = useLocaleId(ctx);
             const t = copyFor(localeId);
             return h(PageErrorBoundary, { t }, h(OrchestratorPanel, { ...slotProps, ctx, t, services }));
+          },
+        ),
+      );
+      ctx.slots.inject('shell.overlay', () =>
+        ctx.slots.register(
+          {
+            name: 'shell.overlay',
+            id: `${PANEL_ID}-chat`,
+            order: 80,
+            label: () => copyFor(readLocaleId(ctx)).chat.title,
+          },
+          (slotProps) => {
+            const localeId = useLocaleId(ctx);
+            const t = copyFor(localeId);
+            return h(GitHubAgentChat, { ...slotProps, ctx, t, services });
           },
         ),
       );
