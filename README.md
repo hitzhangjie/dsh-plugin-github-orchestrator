@@ -91,12 +91,13 @@ The sidebar panel contains:
   closing a chat never closes the app and no overlay covers the window.
 - **Inbox** — unread events with kind chips, repository, branch/PR/issue links
   and the linked task id; mark one or all as read.
-- **Issues/PRs** — the current open/closed backlog (not only event deltas) in two
-  side-by-side columns: **Issues** on the left and **Pull Requests** on the
-  right, sharing the state, repository and limit filters; each row has a
-  one-click *Create task*.
-- **Tasks** — status, branch, issue link, worktree path; sync the storyboard or
-  close a task.
+- **Issues** — the current issue backlog (not only event deltas), filterable by
+  state, repository and limit, with a one-click *Create task* per row.
+- **PRs** — pull requests in their own tab, defaulting to *all* states so open,
+  merged and closed PRs all show up; same filters and *Create task* action.
+- **Tasks** — status, branch, issue link, worktree path; a *from PR* / *from
+  issue* chip says what the task was created from. Sync the storyboard or close
+  a task.
 - **Repos** — clone/fetch each watched repository, see base branch and dirty
   state.
 - **Worktrees** — every live task worktree with its branch and dirty state;

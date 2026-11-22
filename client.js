@@ -23,8 +23,8 @@ window.__ModuleLoader__.load({
     const CHAT_TAB_KIND = 'github-orchestrator-chat';
     const CHAT_TAB_ID = '@hitzhangjie/dsh-plugin-github-orchestrator/right-chat';
     const REFRESH_MS = 15000;
-    // Issues/PRs sits between Inbox and Tasks; Automation is deliberately last.
-    const TAB_KEYS = ['inbox', 'issues', 'tasks', 'repos', 'worktrees', 'settings', 'automation'];
+    // Issues and PRs are separate tabs; Tasks stays between them and Repos.
+    const TAB_KEYS = ['inbox', 'issues', 'pulls', 'tasks', 'repos', 'worktrees', 'settings', 'automation'];
     const EVENT_LIMITS = [20, 50, 100, 200];
     const TASK_STATUSES = ['backlog', 'ready', 'in_progress', 'review', 'done'];
     const ISSUE_KINDS = ['all', 'issue', 'pr'];
@@ -76,7 +76,8 @@ window.__ModuleLoader__.load({
         },
         tabs: {
           inbox: '收件箱',
-          issues: '议题/PR',
+          issues: 'Issues',
+          pulls: 'PRs',
           tasks: '任务',
           repos: '仓库',
           worktrees: '工作树',
@@ -128,8 +129,8 @@ window.__ModuleLoader__.load({
           updated: (time) => `更新于 ${time}`,
         },
         issues: {
-          title: 'Issues 与 Pull Requests',
-          hint: '直接读取 GitHub 上的 issue 与 PR；创建任务会把条目写入本地故事板，并同步到 GitHub issue。',
+          title: 'Issues',
+          hint: '直接读取 GitHub 上的 issue；创建任务会把条目写入本地故事板，并同步到 GitHub issue。',
           kind: '类型',
           kindAll: '全部',
           kindIssue: 'Issue',
@@ -153,15 +154,24 @@ window.__ModuleLoader__.load({
           updated: (time) => `更新于 ${time}`,
           draft: '草稿',
           openLink: '在 GitHub 打开',
-          empty: '没有匹配的 issue 或 PR。',
+          empty: '没有匹配的 issue。',
           issuesTitle: 'Issues',
           prsTitle: 'Pull Requests',
           emptyIssues: '没有匹配的 issue。',
           emptyPrs: '没有匹配的 PR。',
         },
+        pulls: {
+          title: 'Pull Requests',
+          hint: '直接读取 GitHub 上的 PR（open / merged / closed）；创建任务会把条目写入本地故事板，并同步到 GitHub issue。',
+          empty: '没有匹配的 PR。',
+          count: (n) => `${n} 条`,
+          merged: '已合并',
+        },
         tasks: {
           title: '任务看板',
           hint: '任务保存在本地，并通过故事板同步到 GitHub issue。',
+          sourcePr: '来自 PR',
+          sourceIssue: '来自 Issue',
           statusFilter: '状态',
           openOnly: '仅未完成',
           allStatuses: '全部状态',
@@ -427,7 +437,8 @@ window.__ModuleLoader__.load({
         },
         tabs: {
           inbox: 'Inbox',
-          issues: 'Issues/PRs',
+          issues: 'Issues',
+          pulls: 'PRs',
           tasks: 'Tasks',
           repos: 'Repos',
           worktrees: 'Worktrees',
@@ -479,8 +490,8 @@ window.__ModuleLoader__.load({
           updated: (time) => `Updated ${time}`,
         },
         issues: {
-          title: 'Issues and pull requests',
-          hint: 'Reads issues and pull requests directly from GitHub; creating a task adds it to the local storyboard and mirrors it to a GitHub issue.',
+          title: 'Issues',
+          hint: 'Reads issues directly from GitHub; creating a task adds it to the local storyboard and mirrors it to a GitHub issue.',
           kind: 'Kind',
           kindAll: 'All',
           kindIssue: 'Issue',
@@ -510,9 +521,18 @@ window.__ModuleLoader__.load({
           emptyIssues: 'No matching issues.',
           emptyPrs: 'No matching pull requests.',
         },
+        pulls: {
+          title: 'Pull requests',
+          hint: 'Reads pull requests directly from GitHub (open / merged / closed); creating a task adds it to the local storyboard and mirrors a GitHub issue.',
+          empty: 'No matching pull requests.',
+          count: (n) => `${n} item(s)`,
+          merged: 'Merged',
+        },
         tasks: {
           title: 'Storyboard tasks',
           hint: 'Tasks live locally and are mirrored to GitHub issues through the storyboard.',
+          sourcePr: 'from PR',
+          sourceIssue: 'from issue',
           statusFilter: 'Status',
           openOnly: 'Open only',
           allStatuses: 'All statuses',
@@ -2021,9 +2041,11 @@ window.__ModuleLoader__.load({
       const [tasksState, setTasksState] = useState({ status: 'idle', data: null, error: null });
       const [worktreesState, setWorktreesState] = useState({ status: 'idle', data: null, error: null });
       const [issuesState, setIssuesState] = useState({ status: 'idle', data: null, error: null });
+      const [pullsState, setPullsState] = useState({ status: 'idle', data: null, error: null });
 
       const [inboxFilter, setInboxFilter] = useState({ unreadOnly: true, limit: 50, repo: '' });
-      const [issuesFilter, setIssuesFilter] = useState({ kind: 'all', state: 'open', repo: '', limit: 30 });
+      const [issuesFilter, setIssuesFilter] = useState({ state: 'open', repo: '', limit: 30 });
+      const [pullsFilter, setPullsFilter] = useState({ state: 'all', repo: '', limit: 30 });
       const [taskFilter, setTaskFilter] = useState({ status: 'open', repo: '' });
       const [settingsDraft, setSettingsDraft] = useState({ workspaceRoot: '', pollIntervalSec: 120 });
       const [settingsDirty, setSettingsDirty] = useState(false);
@@ -2057,6 +2079,7 @@ window.__ModuleLoader__.load({
       const tabRef = useRef(tab);
       const inboxFilterRef = useRef(inboxFilter);
       const issuesFilterRef = useRef(issuesFilter);
+      const pullsFilterRef = useRef(pullsFilter);
       const repoDefaultRef = useRef('');
       const settingsDirtyRef = useRef(settingsDirty);
       const automationDirtyRef = useRef(automationDirty);
@@ -2070,6 +2093,9 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         issuesFilterRef.current = issuesFilter;
       }, [issuesFilter]);
+      useEffect(() => {
+        pullsFilterRef.current = pullsFilter;
+      }, [pullsFilter]);
       useEffect(() => {
         repoDefaultRef.current = snapshot && snapshot.repos.length > 0 ? snapshot.repos[0].repo : '';
       }, [snapshot]);
@@ -2172,7 +2198,7 @@ window.__ModuleLoader__.load({
           const repo = asText(filter.repo) || repoDefaultRef.current;
           const args = {
             action: 'list',
-            kind: filter.kind,
+            kind: 'issue',
             state: filter.state,
             limit: Number(filter.limit),
           };
@@ -2181,6 +2207,7 @@ window.__ModuleLoader__.load({
           const failure = toolFailure(data);
           if (failure) throw new Error(failure);
           const normalized = normalizeIssues(data);
+          normalized.items = normalized.items.filter((item) => item.kind !== 'pr');
           if (!normalized.repo && repo) normalized.repo = repo;
           setIssuesState({ status: 'ready', data: normalized, error: null });
         } catch (error) {
@@ -2192,14 +2219,42 @@ window.__ModuleLoader__.load({
         }
       }, []);
 
+      const loadPulls = useCallback(async (filter) => {
+        setPullsState((previous) => ({ ...previous, status: previous.data ? previous.status : 'loading', error: null }));
+        try {
+          const repo = asText(filter.repo) || repoDefaultRef.current;
+          const args = {
+            action: 'list',
+            kind: 'pr',
+            state: filter.state,
+            limit: Number(filter.limit),
+          };
+          if (repo) args.repo = repo;
+          const data = await callTool('github_issues', args);
+          const failure = toolFailure(data);
+          if (failure) throw new Error(failure);
+          const normalized = normalizeIssues(data);
+          normalized.items = normalized.items.filter((item) => item.kind === 'pr');
+          if (!normalized.repo && repo) normalized.repo = repo;
+          setPullsState({ status: 'ready', data: normalized, error: null });
+        } catch (error) {
+          setPullsState((previous) => ({
+            ...previous,
+            status: previous.data ? 'ready' : 'error',
+            error: messageOf(error),
+          }));
+        }
+      }, []);
+
       const loadTab = useCallback(
         async (which) => {
           if (which === 'inbox') await loadEvents(inboxFilterRef.current);
           else if (which === 'issues') await loadIssues(issuesFilterRef.current);
+          else if (which === 'pulls') await loadPulls(pullsFilterRef.current);
           else if (which === 'tasks') await loadTasks();
           else if (which === 'worktrees') await loadWorktrees();
         },
-        [loadEvents, loadIssues, loadTasks, loadWorktrees],
+        [loadEvents, loadIssues, loadPulls, loadTasks, loadWorktrees],
       );
 
       const refreshAll = useCallback(
@@ -2230,12 +2285,16 @@ window.__ModuleLoader__.load({
         void loadEvents(inboxFilter);
       }, [inboxFilter, loadEvents]);
 
-      // Issues filters refetch only while the Issues/PRs tab is visible; the tab
-      // switch itself triggers the first load through loadTab.
+      // Issues and PRs filters refetch only while their own tab is visible; the
+      // tab switch itself triggers the first load through loadTab.
       useEffect(() => {
         if (tabRef.current !== 'issues') return;
         void loadIssues(issuesFilter);
       }, [issuesFilter, loadIssues]);
+      useEffect(() => {
+        if (tabRef.current !== 'pulls') return;
+        void loadPulls(pullsFilter);
+      }, [pullsFilter, loadPulls]);
 
       // Keep the automation form in sync with the Host settings until the user
       // starts editing it.
@@ -2476,10 +2535,10 @@ window.__ModuleLoader__.load({
       );
 
       const createTaskFromIssue = useCallback(
-        (item) => {
+        (item, sourceData) => {
           const repo =
             asText(item.repo) ||
-            asText(issuesState.data && issuesState.data.repo) ||
+            asText(sourceData && sourceData.repo) ||
             asText(issuesFilter.repo) ||
             repoDefaultRef.current;
           if (!repo) {
@@ -2501,7 +2560,7 @@ window.__ModuleLoader__.load({
             },
           );
         },
-        [issuesState.data, issuesFilter.repo, runAction, showToast, t, loadSnapshot],
+        [issuesFilter.repo, runAction, showToast, t, loadSnapshot],
       );
 
       const saveWorkspace = useCallback(async () => {
@@ -2738,6 +2797,7 @@ window.__ModuleLoader__.load({
       const tabBadges = {
         inbox: unreadCount > 0 ? unreadCount : null,
         issues: issuesState.data && issuesState.data.items.length > 0 ? issuesState.data.items.length : null,
+        pulls: pullsState.data && pullsState.data.items.length > 0 ? pullsState.data.items.length : null,
         tasks: openTaskCount > 0 ? openTaskCount : null,
         repos: snapshot && snapshot.repos.length > 0 ? snapshot.repos.length : null,
         worktrees: worktreeCount && worktreeCount > 0 ? worktreeCount : null,
@@ -2749,7 +2809,111 @@ window.__ModuleLoader__.load({
       const inboxEvents = inboxData ? inboxData.events : [];
       const issuesData = issuesState.data;
       const issueItems = issuesData ? issuesData.items : [];
-      const autoDispatchEnabled = automationDraft.enabled === true;
+      const pullsData = pullsState.data;
+      const pullItems = pullsData ? pullsData.items : [];
+
+      const renderWorkItemRow = (item, data) => {
+        const stateTone = item.state === 'merged' ? 'success' : item.state === 'closed' ? 'warn' : item.draft ? 'warn' : null;
+        const stateText = item.state === 'merged'
+          ? t.issues.stateMerged
+          : item.state === 'closed'
+            ? t.issues.stateClosed
+            : t.issues.stateOpen;
+        return h(
+          'li',
+          { key: `${item.kind}:${item.number}`, className: 'go-row' },
+          h('span', { className: 'go-mono' }, shortNumber(item.number)),
+          h(Chip, { tone: stateTone }, stateText),
+          item.draft ? h(Chip, { tone: 'warn' }, t.issues.draft) : null,
+          h(
+            'div',
+            { className: 'go-row-main' },
+            h(
+              'span',
+              { className: 'go-row-title' },
+              item.url
+                ? h(
+                    'a',
+                    { className: 'go-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: t.issues.openLink },
+                    item.title || `#${item.number}`,
+                  )
+                : item.title || `#${item.number}`,
+            ),
+            h(
+              'span',
+              { className: 'go-row-sub' },
+              data.repo ? h('span', null, data.repo) : null,
+              item.author ? h('span', null, t.issues.by(item.author)) : null,
+              item.updatedAt ? h('span', { title: formatTimestamp(item.updatedAt) }, t.issues.updated(timeAgo(item.updatedAt, t))) : null,
+              item.labels.length > 0
+                ? h('span', { className: 'go-chips' }, item.labels.map((label) => h(Chip, { key: label }, label)))
+                : null,
+            ),
+          ),
+          h(
+            'div',
+            { className: 'go-row-actions' },
+            h(Button, {
+              label: isBusy(`issue-task:${item.kind}:${item.number}`) ? t.issues.creatingTask : t.issues.createTask,
+              primary: true,
+              quiet: true,
+              onClick: () => createTaskFromIssue(item, data),
+              disabled: busy !== '',
+            }),
+          ),
+        );
+      };
+
+      const renderWorkItemsBody = ({ state, data, items, hint, emptyText, filter, setFilter, load, panelId }) =>
+        h(
+          React.Fragment,
+          null,
+          h(
+            'div',
+            { className: 'go-toolbar' },
+            h(SelectField, {
+              label: t.issues.state,
+              value: filter.state,
+              options: [
+                { value: 'open', label: t.issues.stateOpen },
+                { value: 'closed', label: t.issues.stateClosed },
+                { value: 'all', label: t.issues.stateAll },
+              ],
+              onChange: (value) => setFilter((previous) => ({ ...previous, state: value })),
+            }),
+            h(SelectField, {
+              label: t.issues.repo,
+              value: filter.repo,
+              options: [{ value: '', label: t.issues.allRepos }, ...reposForFilter.map((repo) => ({ value: repo, label: repo }))],
+              onChange: (value) => setFilter((previous) => ({ ...previous, repo: value })),
+            }),
+            h(SelectField, {
+              label: t.issues.limit,
+              value: String(filter.limit),
+              options: ISSUE_LIMITS.map((limit) => ({ value: String(limit), label: String(limit) })),
+              onChange: (value) => setFilter((previous) => ({ ...previous, limit: Number(value) })),
+            }),
+            h(Button, {
+              label: t.refresh,
+              icon: IconRefresh(14),
+              onClick: () => void load(filter),
+              disabled: busy !== '',
+            }),
+            h('span', { className: 'go-count' }, t.issues.count(items.length)),
+          ),
+          h('div', { className: 'go-section-hint', style: { marginBottom: 10 } }, hint),
+          state.error
+            ? h(ErrorNote, { message: state.error, retryLabel: t.common.retry, onRetry: () => void load(filter) })
+            : null,
+          !data
+            ? state.status === 'error'
+              ? null
+              : h(Loading, { t })
+            : items.length === 0
+              ? h(Empty, { text: emptyText })
+              : h('ul', { className: 'go-list', id: panelId }, items.map((item) => renderWorkItemRow(item, data))),
+        );
+
       const tasksData = tasksState.data;
       const filteredTasks = useMemo(() => {
         const list = tasksData ? tasksData.tasks : [];
@@ -2760,6 +2924,7 @@ window.__ModuleLoader__.load({
           return task.status === taskFilter.status;
         });
       }, [tasksData, taskFilter]);
+      const autoDispatchEnabled = automationDraft.enabled === true;
       const worktreeRows = worktreesState.data ? worktreesState.data.rows : [];
       const repoRows = snapshot ? snapshot.repos : [];
 
@@ -3179,126 +3344,29 @@ window.__ModuleLoader__.load({
                 ),
         );
       } else if (tab === 'issues') {
-        body = h(
-          React.Fragment,
-          null,
-          h(
-            'div',
-            { className: 'go-toolbar' },
-            h(SelectField, {
-              label: t.issues.state,
-              value: issuesFilter.state,
-              options: [
-                { value: 'open', label: t.issues.stateOpen },
-                { value: 'closed', label: t.issues.stateClosed },
-                { value: 'all', label: t.issues.stateAll },
-              ],
-              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, state: value })),
-            }),
-            h(SelectField, {
-              label: t.issues.repo,
-              value: issuesFilter.repo,
-              options: [{ value: '', label: t.issues.allRepos }, ...reposForFilter.map((repo) => ({ value: repo, label: repo }))],
-              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, repo: value })),
-            }),
-            h(SelectField, {
-              label: t.issues.limit,
-              value: String(issuesFilter.limit),
-              options: ISSUE_LIMITS.map((limit) => ({ value: String(limit), label: String(limit) })),
-              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, limit: Number(value) })),
-            }),
-            h(Button, {
-              label: t.refresh,
-              icon: IconRefresh(14),
-              onClick: () => void loadIssues(issuesFilterRef.current),
-              disabled: busy !== '',
-            }),
-            h('span', { className: 'go-count' }, t.issues.count(issueItems.length)),
-          ),
-          h('div', { className: 'go-section-hint', style: { marginBottom: 10 } }, t.issues.hint),
-          issuesState.error
-            ? h(ErrorNote, { message: issuesState.error, retryLabel: t.common.retry, onRetry: () => void loadIssues(issuesFilterRef.current) })
-            : null,
-          !issuesData
-            ? issuesState.status === 'error'
-              ? null
-              : h(Loading, { t })
-            : (() => {
-                const renderRow = (item) => {
-                  const stateTone = item.state === 'merged' ? 'success' : item.state === 'closed' ? 'warn' : item.draft ? 'warn' : null;
-                  const stateText = item.state === 'merged'
-                    ? t.issues.stateMerged
-                    : item.state === 'closed'
-                      ? t.issues.stateClosed
-                      : t.issues.stateOpen;
-                  return h(
-                    'li',
-                    { key: `${item.kind}:${item.number}`, className: 'go-row' },
-                    h('span', { className: 'go-mono' }, shortNumber(item.number)),
-                    h(Chip, { tone: stateTone }, stateText),
-                    item.draft ? h(Chip, { tone: 'warn' }, t.issues.draft) : null,
-                    h(
-                      'div',
-                      { className: 'go-row-main' },
-                      h(
-                        'span',
-                        { className: 'go-row-title' },
-                        item.url
-                          ? h(
-                              'a',
-                              { className: 'go-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: t.issues.openLink },
-                              item.title || `#${item.number}`,
-                            )
-                          : item.title || `#${item.number}`,
-                      ),
-                      h(
-                        'span',
-                        { className: 'go-row-sub' },
-                        issuesData.repo ? h('span', null, issuesData.repo) : null,
-                        item.author ? h('span', null, t.issues.by(item.author)) : null,
-                        item.updatedAt ? h('span', { title: formatTimestamp(item.updatedAt) }, t.issues.updated(timeAgo(item.updatedAt, t))) : null,
-                        item.labels.length > 0
-                          ? h('span', { className: 'go-chips' }, item.labels.map((label) => h(Chip, { key: label }, label)))
-                          : null,
-                      ),
-                    ),
-                    h(
-                      'div',
-                      { className: 'go-row-actions' },
-                      h(Button, {
-                        label: isBusy(`issue-task:${item.kind}:${item.number}`) ? t.issues.creatingTask : t.issues.createTask,
-                        primary: true,
-                        quiet: true,
-                        onClick: () => createTaskFromIssue(item),
-                        disabled: busy !== '',
-                      }),
-                    ),
-                  );
-                };
-                const renderColumn = (key, title, items, emptyText) =>
-                  h(
-                    'section',
-                    { key, className: 'go-issues-col', id: `go-panel-issues-${key}`, 'aria-label': title },
-                    h(
-                      'div',
-                      { className: 'go-issues-colhead' },
-                      h('h3', { className: 'go-issues-coltitle' }, title),
-                      h('span', { className: 'go-count' }, String(items.length)),
-                    ),
-                    items.length === 0
-                      ? h(Empty, { text: emptyText })
-                      : h('ul', { className: 'go-list' }, items.map(renderRow)),
-                  );
-                const issuesOnly = issueItems.filter((item) => item.kind !== 'pr');
-                const prsOnly = issueItems.filter((item) => item.kind === 'pr');
-                return h(
-                  'div',
-                  { className: 'go-issues-grid' },
-                  renderColumn('issues', t.issues.issuesTitle, issuesOnly, t.issues.emptyIssues),
-                  renderColumn('prs', t.issues.prsTitle, prsOnly, t.issues.emptyPrs),
-                );
-              })(),
-        );
+        body = renderWorkItemsBody({
+          state: issuesState,
+          data: issuesData,
+          items: issueItems,
+          hint: t.issues.hint,
+          emptyText: t.issues.empty,
+          filter: issuesFilter,
+          setFilter: setIssuesFilter,
+          load: loadIssues,
+          panelId: 'go-panel-issues',
+        });
+      } else if (tab === 'pulls') {
+        body = renderWorkItemsBody({
+          state: pullsState,
+          data: pullsData,
+          items: pullItems,
+          hint: t.pulls.hint,
+          emptyText: t.pulls.empty,
+          filter: pullsFilter,
+          setFilter: setPullsFilter,
+          load: loadPulls,
+          panelId: 'go-panel-pulls',
+        });
       } else if (tab === 'tasks') {
         body = h(
           React.Fragment,
@@ -3342,6 +3410,11 @@ window.__ModuleLoader__.load({
                       { key: task.id, className: 'go-row' },
                       h('span', { className: 'go-mono' }, task.id),
                       h(Chip, { tone: task.status === 'done' ? 'success' : task.status === 'review' ? 'warn' : null }, statusLabel(t, task.status)),
+                      task.issueUrl && String(task.issueUrl).includes('/pull/')
+                        ? h(Chip, { tone: 'brand' }, t.tasks.sourcePr)
+                        : task.issueUrl && String(task.issueUrl).includes('/issues/')
+                          ? h(Chip, null, t.tasks.sourceIssue)
+                          : null,
                       h(
                         'div',
                         { className: 'go-row-main' },

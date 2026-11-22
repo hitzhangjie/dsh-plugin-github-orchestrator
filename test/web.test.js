@@ -1399,16 +1399,16 @@ test('panel starts and finishes the GitHub device flow through POST /action', as
   }
 });
 
-test('issues tab lists issues and PRs and creates a storyboard task', async () => {
+test('issues and pull requests live in separate tabs and each creates a task', async () => {
   const panel = await renderPanel();
   try {
-    await clickRenderedButton(panel, '议题/PR', (node) => node.props.role === 'tab');
+    await clickRenderedButton(panel, 'Issues', (node) => node.props.role === 'tab');
 
-    const issuesCalls = () => panel.actions.filter((entry) => entry.tool === 'github_issues');
-    assert.ok(issuesCalls().length > 0, 'opening the tab should request github_issues');
+    const issuesCalls = () => panel.actions.filter((entry) => entry.tool === 'github_issues' && entry.args.kind === 'issue');
+    assert.ok(issuesCalls().length > 0, 'opening the Issues tab should request github_issues kind=issue');
     assert.deepEqual(issuesCalls()[0].args, {
       action: 'list',
-      kind: 'all',
+      kind: 'issue',
       state: 'open',
       limit: 30,
       repo: 'owner/name',
@@ -1417,8 +1417,7 @@ test('issues tab lists issues and PRs and creates a storyboard task', async () =
     const text = textOfRendered(panel.tree);
     assert.ok(text.includes('#101'), 'issue number should render');
     assert.ok(text.includes('Fix broken login'), 'issue title should render');
-    assert.ok(text.includes('#102'), 'PR number should render');
-    assert.ok(text.includes('Add OAuth login'), 'PR title should render');
+    assert.ok(!text.includes('Add OAuth login'), 'pull requests must not leak into the Issues tab');
     assert.ok(text.includes('作者 octocat'), 'author should render');
     assert.ok(text.includes('bug') && text.includes('P1'), 'labels should render');
     assert.ok(text.includes('打开'), 'open state chip should render');
@@ -1427,16 +1426,6 @@ test('issues tab lists issues and PRs and creates a storyboard task', async () =
       (node) => node.tag === 'a' && node.props.href === 'https://github.com/owner/name/issues/101',
     );
     assert.ok(issueLink, 'GitHub link should render for the issue');
-
-    assert.ok(text.includes('Issues'), 'issues column title should render');
-    assert.ok(text.includes('Pull Requests'), 'PR column title should render');
-    const issueColumn = findRenderedNode(panel.tree, (node) => node.props.id === 'go-panel-issues-issues');
-    const prColumn = findRenderedNode(panel.tree, (node) => node.props.id === 'go-panel-issues-prs');
-    assert.ok(issueColumn, 'issues should render in their own column');
-    assert.ok(prColumn, 'PRs should render in their own column');
-    assert.ok(textOfRendered(issueColumn).includes('Fix broken login'), 'issue should be in the issue column');
-    assert.ok(!textOfRendered(issueColumn).includes('Add OAuth login'), 'PR must not leak into the issue column');
-    assert.ok(textOfRendered(prColumn).includes('Add OAuth login'), 'PR should be in the PR column');
 
     // State and limit filters are forwarded as well.
     const stateSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === 'open');
@@ -1451,7 +1440,7 @@ test('issues tab lists issues and PRs and creates a storyboard task', async () =
     assert.equal(filteredCall.args.state, 'closed');
     assert.equal(filteredCall.args.limit, 50);
 
-    // "Create task" posts the exact github_tasks create body for that row.
+    // "Create task" posts the exact github_tasks create body for that issue row.
     const before = panel.actions.length;
     await clickRenderedButton(panel, '创建任务');
     const createCall = panel.actions.slice(before).find((entry) => entry.tool === 'github_tasks');
@@ -1463,6 +1452,23 @@ test('issues tab lists issues and PRs and creates a storyboard task', async () =
       description: 'GitHub issue #101: https://github.com/owner/name/issues/101',
     });
     assert.ok(textOfRendered(panel.tree).includes('已创建任务 T42'), 'created task id should be toasted');
+
+    // The PR tab is its own list, defaults to all states so merged PRs show up.
+    await clickRenderedButton(panel, 'PRs', (node) => node.props.role === 'tab');
+    const pullCalls = () => panel.actions.filter((entry) => entry.tool === 'github_issues' && entry.args.kind === 'pr');
+    assert.ok(pullCalls().length > 0, 'opening the PRs tab should request github_issues kind=pr');
+    assert.deepEqual(pullCalls()[0].args, {
+      action: 'list',
+      kind: 'pr',
+      state: 'all',
+      limit: 30,
+      repo: 'owner/name',
+    });
+    const pullText = textOfRendered(panel.tree);
+    assert.ok(pullText.includes('#102'), 'PR number should render');
+    assert.ok(pullText.includes('Add OAuth login'), 'PR title should render');
+    assert.ok(!pullText.includes('Fix broken login'), 'issues must not leak into the PRs tab');
+    assert.ok(pullText.includes('创建任务'), 'PR rows should still offer Create task');
   } finally {
     panel.dispose();
   }
@@ -1567,12 +1573,17 @@ test('automation tab shows dispatch status and drives config and dispatch action
 test('issues and automation tabs render English copy', async () => {
   const panel = await renderPanel({ locale: 'en' });
   try {
-    await clickRenderedButton(panel, 'Issues/PRs', (node) => node.props.role === 'tab');
+    await clickRenderedButton(panel, 'Issues', (node) => node.props.role === 'tab');
     const issuesText = textOfRendered(panel.tree);
-    assert.ok(issuesText.includes('Reads issues and pull requests directly'));
+    assert.ok(issuesText.includes('Reads issues directly'));
     assert.ok(issuesText.includes('Create task'));
     assert.ok(issuesText.includes('by octocat'));
     assert.ok(issuesText.includes('Fix broken login'));
+
+    await clickRenderedButton(panel, 'PRs', (node) => node.props.role === 'tab');
+    const pullsText = textOfRendered(panel.tree);
+    assert.ok(pullsText.includes('Reads pull requests directly'));
+    assert.ok(pullsText.includes('Add OAuth login'));
 
     await clickRenderedButton(panel, 'Automation', (node) => node.props.role === 'tab');
     const automationText = textOfRendered(panel.tree);
