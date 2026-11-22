@@ -82,14 +82,13 @@ The sidebar panel contains:
   After approving, press *I authorized, continue*; the token is stored in the
   credentials service and the panel switches to the signed-in state. *Sign out*
   deletes the stored credential.
-- **Right-side Agent chat** — a native right-sidebar tab (not an overlay): the
-  dispatch card's *Agent chat* button opens it, the page also appears in the
-  right sidebar's guide, and it lists the live chat sessions (the watcher is
-  marked and selected by default) so you can switch between them. It shows the
-  selected session's recent messages and tool calls, running/idle state, and a
-  composer that sends to that session. The right sidebar's own collapse/close
-  controls still belong to the Harness, so closing the chat cannot close the
-  app.
+- **Right-side Agent chat** — the header's *Agent chat* button opens the watcher
+  session as a **native conversation tab in the right sidebar** (the same
+  conversation UI as the main chat, hosted by the sidebar's chat tab). The
+  Automation tab lists the live chat sessions with *Open chat in right sidebar*,
+  so you can open any session there and switch between open chat tabs in the
+  right rail. The Harness owns the right sidebar's collapse/close controls, so
+  closing a chat never closes the app and no overlay covers the window.
 - **Inbox** — unread events with kind chips, repository, branch/PR/issue links
   and the linked task id; mark one or all as read.
 - **Issues/PRs** — the current open/closed issue and pull-request backlog (not
@@ -126,13 +125,13 @@ the GitHub/worktree/storyboard tools. There are two ways to put it to work:
    `git_sync` itself. This is the most flexible path, and the same session can
    keep steering the work.
 
-2. **Panel → Agent chat** — the dispatch card now just opens the native
-   **right-sidebar Agent chat tab**. That tab lists the live sessions (the
-   watcher is marked and selected by default), shows recent messages and tool
-   calls, and sends your message to the selected session. If the panel is the
-   active main view, opening the chat first switches to the watcher conversation
-   so the right sidebar has a session to attach to. *Open in main view* jumps to
-   the full transcript when you need it.
+2. **Header → Agent chat** — opens the watcher session as a **native chat tab in
+   the right sidebar**; the main view stays untouched. The panel is now only a
+   launcher plus dashboard — the old top-of-panel dispatch form is gone. The
+   Automation tab lists the live chat sessions and can open any of them as a
+   right-sidebar chat tab. If no conversation is on screen, the button first
+   opens the watcher conversation so the right sidebar has a session to attach
+   to.
 
 Both paths use the same tools and state (event inbox, tasks, storyboard), so a
 task dispatched from the panel is the same task you can follow from the chat
@@ -386,7 +385,7 @@ re-imported from issue meta blocks with `github_tasks action=import`.
 
 ## Verification
 
-`node --test "test/**/*.test.js"` runs **232 tests** covering the Git engine,
+`node --test "test/**/*.test.js"` runs **231 tests** covering the Git engine,
 token-authenticated Git, GitHub client, issue/PR listing, OAuth device flow,
 event poller, auto-dispatch engine, task store, storyboard, the tool layer, the
 Host web API and integration scenarios offline (temp repositories, an

@@ -307,6 +307,13 @@ window.__ModuleLoader__.load({
           sent: (sessionId) => `已发送到会话 ${sessionId}。`,
           sentGeneric: '已发送给 watcher。',
           enabledBadge: '自动派发开启',
+          chatSessionsTitle: '聊天会话',
+          chatSessionsHint: '当前 live 会话列表；可在右侧栏打开原生聊天窗口。',
+          chatSessionsEmpty: '暂无 live 会话。',
+          openRightChat: '在右侧栏打开聊天',
+          watcherTag: 'Watcher',
+          cold: '未激活',
+          openChatFailed: '无法打开右侧聊天',
         },
         auth: {
           title: 'GitHub 账号',
@@ -647,6 +654,13 @@ window.__ModuleLoader__.load({
           sent: (sessionId) => `Sent to session ${sessionId}.`,
           sentGeneric: 'Sent to the watcher.',
           enabledBadge: 'Auto dispatch on',
+          chatSessionsTitle: 'Chat sessions',
+          chatSessionsHint: 'Live sessions; open any of them as a native chat in the right sidebar.',
+          chatSessionsEmpty: 'No live sessions.',
+          openRightChat: 'Open chat in right sidebar',
+          watcherTag: 'Watcher',
+          cold: 'cold',
+          openChatFailed: 'Could not open the right-side chat',
         },
         auth: {
           title: 'GitHub account',
@@ -2009,6 +2023,7 @@ window.__ModuleLoader__.load({
       const [automationDirty, setAutomationDirty] = useState(false);
       const [automationError, setAutomationError] = useState(null);
       const [watcherDraft, setWatcherDraft] = useState('');
+      const [chatSessions, setChatSessions] = useState([]);
       const [dispatchOverride, setDispatchOverride] = useState(null);
 
       const [authOpen, setAuthOpen] = useState(false);
@@ -2631,6 +2646,44 @@ window.__ModuleLoader__.load({
         }
       }, [dispatchOverride, snapshot, props.services, showToast, t]);
 
+      const loadChatSessions = useCallback(async () => {
+        try {
+          const data = await callTool('github_dispatch', { action: 'sessions' });
+          setChatSessions(Array.isArray(data && data.sessions) ? data.sessions : []);
+        } catch {
+          setChatSessions([]);
+        }
+      }, []);
+
+      useEffect(() => {
+        if (tab === 'automation') void loadChatSessions();
+      }, [tab, loadChatSessions]);
+
+      const openChatAside = useCallback(
+        async (sessionId) => {
+          const services = props.services || {};
+          const sidebar = services.sidebarRight;
+          if (!sidebar || typeof sidebar.openResource !== 'function') {
+            showToast(t.chat.unavailable);
+            return;
+          }
+          let mounted = sidebar.mounted && typeof sidebar.mounted.getSnapshot === 'function' ? sidebar.mounted.getSnapshot() : undefined;
+          if (!mounted && services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') {
+            services.uiWorkspace.openSession(sessionId);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            mounted = sidebar.mounted && typeof sidebar.mounted.getSnapshot === 'function' ? sidebar.mounted.getSnapshot() : undefined;
+          }
+          const query = new URLSearchParams({ parent: mounted || sessionId, mode: 'continuable' });
+          const address = `dsh-resource://subagentchat/session/${encodeURIComponent(sessionId)}?${query.toString()}`;
+          try {
+            sidebar.openResource(address, { kind: 'subagentchat', preferNewPane: true });
+          } catch (error) {
+            showToast(`${t.automation.openChatFailed}: ${messageOf(error)}`);
+          }
+        },
+        [props.services, showToast, t],
+      );
+
       const copyDeviceCode = useCallback(async () => {
         const code = authDevice ? authDevice.userCode : '';
         if (!code) return;
@@ -2727,6 +2780,11 @@ window.__ModuleLoader__.load({
               onClick: () => void refreshAll(true),
               disabled: refreshing,
               primary: true,
+            }),
+            h(Button, {
+              label: t.chat.open,
+              icon: IconChat(15),
+              onClick: () => void openRightChatFromPanel(),
             }),
             h(Button, {
               label: authOpen ? t.auth.hide : t.auth.manage,
@@ -2940,22 +2998,19 @@ window.__ModuleLoader__.load({
 
       const openRightChatFromPanel = useCallback(async () => {
         const sidebar = services && services.sidebarRight;
-        if (!sidebar || typeof sidebar.openTab !== 'function') {
+        if (!sidebar || typeof sidebar.openResource !== 'function') {
           showToast(t.chat.unavailable);
           return;
         }
         const watcherId = snapshot && snapshot.dispatch ? snapshot.dispatch.sessionId : null;
         const mounted = sidebar.mounted && typeof sidebar.mounted.getSnapshot === 'function' ? sidebar.mounted.getSnapshot() : undefined;
-        if (!mounted && watcherId && services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') {
-          services.uiWorkspace.openSession(watcherId);
-          await new Promise((resolve) => setTimeout(resolve, 450));
+        const target = watcherId || mounted;
+        if (!target) {
+          showToast(t.chat.noSession);
+          return;
         }
-        try {
-          sidebar.openTab(CHAT_TAB_KIND);
-        } catch (error) {
-          showToast(messageOf(error));
-        }
-      }, [services, snapshot, showToast, t]);
+        await openChatAside(target);
+      }, [services, snapshot, openChatAside, showToast, t]);
 
       const dispatchCard = h(
         'section',
@@ -3686,6 +3741,48 @@ window.__ModuleLoader__.load({
               }),
             ),
           ),
+          h(
+            Section,
+            null,
+            h(SectionHead, { title: t.automation.chatSessionsTitle, hint: t.automation.chatSessionsHint }),
+            chatSessions.length === 0
+              ? h('div', { className: 'go-section-hint' }, t.automation.chatSessionsEmpty)
+              : h(
+                  'ul',
+                  { className: 'go-list' },
+                  chatSessions.map((session) =>
+                    h(
+                      'li',
+                      { key: session.id, className: 'go-row' },
+                      h(
+                        'div',
+                        { className: 'go-row-main' },
+                        h(
+                          'span',
+                          { className: 'go-row-title' },
+                          `${session.isWatcher ? `${t.automation.watcherTag} · ` : ''}${session.id}`,
+                        ),
+                        h(
+                          'div',
+                          { className: 'go-row-sub' },
+                          h('code', null, session.cwd || t.common.none),
+                          session.live === false ? h('span', null, t.automation.cold) : null,
+                        ),
+                      ),
+                      h(
+                        'div',
+                        { className: 'go-row-actions' },
+                        h(Button, {
+                          label: t.automation.openRightChat,
+                          icon: IconChat(14),
+                          quiet: true,
+                          onClick: () => void openChatAside(session.id),
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+          ),
         );
       }
 
@@ -3704,7 +3801,6 @@ window.__ModuleLoader__.load({
         header,
         snapshotBanner,
         authCard,
-        dispatchCard,
         tabBar,
         h('div', { className: 'go-body', id: `go-panel-${tab}`, role: 'tabpanel' }, body),
         footer,
@@ -3793,34 +3889,6 @@ window.__ModuleLoader__.load({
       } catch {
         /* right sidebar unavailable */
       }
-      try {
-        ctx.inject(['sidebarRightTabs'], (sctx) => {
-          services.sidebarRightTabs = sctx.sidebarRightTabs;
-          const tabs = sctx.sidebarRightTabs;
-          if (!tabs || typeof tabs.register !== 'function') return;
-          ctx.effect(
-            () =>
-              tabs.register({
-                id: CHAT_TAB_ID,
-                kind: CHAT_TAB_KIND,
-                multiple: false,
-                priority: 'extension',
-                title: () => copyFor(readLocaleId(ctx)).chat.title,
-                guide: [
-                  {
-                    id: 'github-agent-chat',
-                    order: 40,
-                    title: () => copyFor(readLocaleId(ctx)).chat.title,
-                    description: () => copyFor(readLocaleId(ctx)).chat.subtitle,
-                  },
-                ],
-              }),
-            'github-orchestrator: right chat tab type',
-          );
-        });
-      } catch {
-        /* right sidebar tab registry unavailable */
-      }
       ctx.slots.inject('sidebar.panellist', () =>
         ctx.slots.register(
           {
@@ -3842,19 +3910,6 @@ window.__ModuleLoader__.load({
             const localeId = useLocaleId(ctx);
             const t = copyFor(localeId);
             return h(PageErrorBoundary, { t }, h(OrchestratorPanel, { ...slotProps, ctx, t, services }));
-          },
-        ),
-      );
-      ctx.slots.inject('sidebar.right.pane.tab', () =>
-        ctx.slots.register(
-          {
-            name: 'sidebar.right.pane.tab',
-            key: CHAT_TAB_ID,
-          },
-          (slotProps) => {
-            const localeId = useLocaleId(ctx);
-            const t = copyFor(localeId);
-            return h(GitHubAgentChat, { ...slotProps, ctx, t, services });
           },
         ),
       );

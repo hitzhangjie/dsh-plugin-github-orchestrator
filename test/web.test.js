@@ -616,16 +616,12 @@ test('apply(ctx) registers the sidebar icon and the main page under one key', ()
 
   mod.apply(ctx);
 
-  assert.deepEqual(injected, ['sidebar.panellist', 'main', 'sidebar.right.pane.tab']);
+  assert.deepEqual(injected, ['sidebar.panellist', 'main']);
 
   const sidebar = registered.find((entry) => entry.meta.name === 'sidebar.panellist');
   const main = registered.find((entry) => entry.meta.name === 'main');
-  const chat = registered.find((entry) => entry.meta.name === 'sidebar.right.pane.tab');
   assert.ok(sidebar, 'sidebar.panellist must be registered');
   assert.ok(main, 'main page must be registered');
-  assert.ok(chat, 'right-sidebar Agent chat body must be registered');
-  assert.equal(chat.meta.key, '@hitzhangjie/dsh-plugin-github-orchestrator/right-chat');
-  assert.equal(typeof chat.component, 'function');
   assert.equal(sidebar.meta.id, 'github-orchestrator');
   assert.equal(sidebar.meta.order, 30);
   assert.equal(typeof sidebar.meta.label, 'function');
@@ -1144,117 +1140,6 @@ async function renderPanel(options = {}) {
   return state;
 }
 
-/**
- * Boot the browser half and render the right-sidebar Agent chat tab body with
- * fake session services. Returns the rendered tree plus recorded HTTP calls.
- */
-async function renderChat(options = {}) {
-  const snapshot = options.snapshot ?? panelSnapshot();
-  if (!snapshot.dispatch) {
-    snapshot.dispatch = {
-      enabled: true,
-      sessionId: 'session-watcher-1',
-      lastDispatchAt: null,
-      count: 0,
-      lastError: null,
-      lastEventAt: null,
-      seen: 0,
-      skipped: 0,
-    };
-  }
-  snapshot.dispatch.sessionId = 'session-watcher-1';
-  const windowState = options.windowState ?? {
-    entries: [
-      {
-        type: 'event',
-        event: {
-          type: 'user/message',
-          seq: 1,
-          time: Date.now(),
-          data: { content: [{ type: 'text', text: '处理 PR #139' }] },
-        },
-      },
-      {
-        type: 'event',
-        event: {
-          type: 'assistant/message',
-          seq: 2,
-          time: Date.now(),
-          data: { message: { content: [{ type: 'text', text: '我正在处理 PR #139' }] } },
-        },
-      },
-    ],
-  };
-  const sessionsList = {
-    sessions: [
-      { id: 'session-watcher-1', isWatcher: true, cwd: PANEL_WORKSPACE, live: true },
-      { id: 'session-conversation-2', isWatcher: false, cwd: PANEL_WORKSPACE, live: true },
-    ],
-    watcherSessionId: 'session-watcher-1',
-  };
-  const optionAction = options.actionResult;
-  const actionResult = (body) => {
-    if (body.tool === 'github_dispatch' && body.args.action === 'sessions') return sessionsList;
-    if (optionAction) return optionAction(body);
-    return { ok: true };
-  };
-  const { fetchImpl, calls, actions } = makePanelFetch(snapshot, { ...options, actionResult });
-  const react = createTestReact();
-  const spec = loadClientModule({ fetch: fetchImpl, document: { hidden: false }, navigator: {} });
-  const mod = spec.factory(() => react.React);
-  const registered = [];
-  const opened = [];
-  const services = options.services ?? {
-    sessions: {
-      retain() {
-        return {
-          ready: Promise.resolve({
-            session: { getSnapshot: () => ({ running: true }), subscribe: () => () => {} },
-            eventSource: { getSnapshot: () => windowState, subscribe: () => () => {} },
-          }),
-          release() {},
-        };
-      },
-    },
-    uiWorkspace: { openSession: (id) => opened.push(id) },
-  };
-  const ctx = {
-    slots: {
-      inject(_name, callback) {
-        callback();
-        return { dispose() {} };
-      },
-      register(meta, component) {
-        registered.push({ meta, component });
-        return { dispose() {} };
-      },
-    },
-    get(name) {
-      if (name === 'locale') return { getLocale: () => ({ active: options.locale ?? 'zh' }), subscribe: () => () => {} };
-      return null;
-    },
-    inject(_deps, callback) {
-      callback(services);
-    },
-  };
-  mod.apply(ctx);
-  const tab = registered.find((entry) => entry.meta.name === 'sidebar.right.pane.tab');
-  assert.ok(tab, 'sidebar.right.pane.tab chat body must be registered');
-  const state = {
-    tree: await react.settle(tab.component, {}),
-    calls,
-    actions,
-    opened,
-    async settle() {
-      state.tree = await react.settle(tab.component, {});
-      return state.tree;
-    },
-    dispose() {
-      react.dispose();
-    },
-  };
-  return state;
-}
 
 test('panel renders the dashboard, reads only its own endpoints and switches tabs', async () => {
   const panel = await renderPanel();
@@ -1443,13 +1328,13 @@ test('panel sends repo, task, worktree and settings actions through POST /action
   }
 });
 
-test('panel opens the right-sidebar Agent chat through the sidebar service', async () => {
-  const openedTabs = [];
+test('panel opens the watcher conversation in the right sidebar', async () => {
+  const openedResources = [];
   const openedSessions = [];
   const sidebarRight = {
-    mounted: { getSnapshot: () => undefined },
-    openTab(kind) {
-      openedTabs.push(kind);
+    mounted: { getSnapshot: () => 'session-current' },
+    openResource(address, options) {
+      openedResources.push({ address, options });
     },
   };
   const uiWorkspace = {
@@ -1467,8 +1352,12 @@ test('panel opens the right-sidebar Agent chat through the sidebar service', asy
   try {
     await clickRenderedButton(panel, 'Agent 聊天');
     await new Promise((resolve) => setTimeout(resolve, 600));
-    assert.deepEqual(openedSessions, ['session-watcher-1']);
-    assert.deepEqual(openedTabs, ['github-orchestrator-chat']);
+    assert.equal(openedResources.length, 1);
+    const opened = openedResources[0];
+    assert.match(opened.address, /^dsh-resource:\/\/subagentchat\/session\/session-watcher-1\?/);
+    assert.equal(opened.options.kind, 'subagentchat');
+    assert.equal(opened.options.preferNewPane, true);
+    assert.deepEqual(openedSessions, []);
   } finally {
     panel.dispose();
   }
@@ -1692,46 +1581,5 @@ test('issues and automation tabs render English copy', async () => {
     assert.ok(automationText.includes('Dispatch status'));
   } finally {
     panel.dispose();
-  }
-});
-
-test('right-side Agent chat tab renders watcher history, sessions and sends tasks', async () => {
-  const chat = await renderChat();
-  try {
-    for (let i = 0; i < 3; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      await chat.settle();
-    }
-
-    const text = textOfRendered(chat.tree);
-    assert.ok(text.includes('GitHub Agent'), 'chat title should render');
-    assert.ok(text.includes('处理 PR #139'), 'user message should render');
-    assert.ok(text.includes('我正在处理 PR #139'), 'assistant message should render');
-    assert.ok(text.includes('Agent 工作中'), 'running state should render');
-    assert.ok(text.includes('Watcher'), 'session list should mark the watcher session');
-
-    const sessionSelect = findRenderedNode(chat.tree, (node) => node.tag === 'select');
-    assert.ok(sessionSelect, 'session list should render');
-    assert.equal(sessionSelect.props.value, 'session-watcher-1');
-
-    const textarea = findRenderedNode(chat.tree, (node) => node.tag === 'textarea');
-    assert.ok(textarea, 'chat composer should render');
-    textarea.props.onChange({ target: { value: '帮我处理 review' } });
-    await chat.settle();
-    const sendButton = findRenderedNode(
-      chat.tree,
-      (node) => node.tag === 'button' && textOfRendered(node).includes('发送'),
-    );
-    assert.ok(sendButton, 'send button should render');
-    sendButton.props.onClick();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    await chat.settle();
-
-    const action = chat.actions.find((entry) => entry.tool === 'github_dispatch' && entry.args.action === 'send');
-    assert.ok(action, 'sending to the watcher must call github_dispatch action=send');
-    assert.equal(action.args.text, '帮我处理 review');
-    assert.ok(chat.calls.every((url) => url.startsWith(PANEL_ROUTE)), 'chat must only call the plugin API');
-  } finally {
-    chat.dispose();
   }
 });
