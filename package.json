@@ -1,0 +1,64 @@
+{
+  "name": "@hitzhangjie/dsh-plugin-github-orchestrator",
+  "version": "0.2.0",
+  "private": true,
+  "description": "GitHub event watcher and worktree orchestrator for DeepSeek Harness: an in-app panel and OAuth sign-in, issues/pull requests/reviews/pushes followed into an inbox, concurrent tasks in Git worktrees, rebase/merge/cleanup, and a storyboard kept in GitHub issues.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "github",
+    "git",
+    "worktree",
+    "oauth",
+    "storyboard"
+  ],
+  "author": {
+    "name": "hitzhangjie",
+    "url": "https://github.com/hitzhangjie"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hitzhangjie/dsh-plugin-github-orchestrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hitzhangjie/dsh-plugin-github-orchestrator/issues"
+  },
+  "homepage": "https://github.com/hitzhangjie/dsh-plugin-github-orchestrator#readme",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "CONTRACT.md",
+    "SPEC-V2.md"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check lib/tools.js && node --check client.js && node -e \"import('./index.js').then(()=>console.log('esm ok'))\"",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

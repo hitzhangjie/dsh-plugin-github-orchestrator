@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub orchestrator",
+    "description": "A GitHub workbench panel with OAuth sign-in: follows issues, pull requests, reviews and pushes, runs concurrent tasks in Git worktrees, and keeps a storyboard in GitHub issues."
+  }
+}

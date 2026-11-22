@@ -1,0 +1,24 @@
+# Bundle layer for @hitzhangjie/dsh-plugin-github-orchestrator.
+#
+# A Host-only bundle: it contributes agent tools and runtime context, no
+# browser half. Workspace root, repositories and polling can be set either in
+# this config (initial values) or at runtime through the github_config tool.
+- insert:
+    - id: hitzhangjie-github-orchestrator
+      name: '@hitzhangjie/dsh-plugin-github-orchestrator'
+      config:
+        # Absolute path of the directory that holds repository checkouts and
+        # worktrees. Empty means <DSH_HOME>/github-work.
+        workspaceRoot: ''
+        # Repositories to watch: "owner/name" or
+        # { repo, local?, baseBranch? }.
+        repos: []
+        pollIntervalSec: 120
+        defaultBaseBranch: main
+        branchPrefix: 'task/'
+        # OAuth App client id for the in-plugin "Sign in with GitHub" device
+        # flow. Empty uses GITHUB_OAUTH_CLIENT_ID, then the documented built-in
+        # public fallback. Create your own OAuth App at
+        # https://github.com/settings/developers and enable device flow.
+        oauthClientId: ''
+        oauthScopes: 'repo read:user'

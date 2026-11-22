@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GitHub 任务编排器",
+    "description": "带 OAuth 登录的 GitHub 工作台面板：监听 issue、PR、review 和 push，用 Git worktree 并发执行任务，并把任务故事板保存在 GitHub issue 中。"
+  }
+}
