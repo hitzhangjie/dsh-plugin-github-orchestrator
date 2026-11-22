@@ -1252,7 +1252,10 @@ window.__ModuleLoader__.load({
     function normalizeIssueItem(entry) {
       const raw = asObject(entry);
       const stateText = asText(raw.state).toLowerCase();
-      const merged = raw.merged === true || stateText === 'merged' || raw.mergedAt !== undefined || raw.merged_at !== undefined;
+      // The Host always emits a `mergedAt` key (null when unmerged), so the
+      // key's presence says nothing; only a real timestamp or flag marks it.
+      const mergedAtText = asText(raw.mergedAt) || asText(raw.merged_at);
+      const merged = raw.merged === true || stateText === 'merged' || mergedAtText.length > 0;
       const isPull = raw.isPull === true || asText(raw.kind).toLowerCase() === 'pr' || (raw.pull_request !== undefined && raw.pull_request !== null);
       const labels = asArray(raw.labels)
         .map((label) => (typeof label === 'string' ? label.trim() : asText(asObject(label).name)))

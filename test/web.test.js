@@ -772,6 +772,7 @@ function defaultActionResult(body) {
           updatedAt: PANEL_ISO,
           draft: false,
           merged: false,
+          mergedAt: null,
           isPull: true,
         },
       ],
@@ -1467,6 +1468,8 @@ test('issues and pull requests live in separate tabs and each creates a task', a
     const pullText = textOfRendered(panel.tree);
     assert.ok(pullText.includes('#102'), 'PR number should render');
     assert.ok(pullText.includes('Add OAuth login'), 'PR title should render');
+    assert.ok(pullText.includes('打开'), 'an open PR must render the open state, not merged');
+    assert.ok(!pullText.includes('已合并'), 'an open PR must not be shown as merged');
     assert.ok(!pullText.includes('Fix broken login'), 'issues must not leak into the PRs tab');
     assert.ok(pullText.includes('创建任务'), 'PR rows should still offer Create task');
   } finally {
