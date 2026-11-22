@@ -1428,13 +1428,15 @@ test('issues tab lists issues and PRs and creates a storyboard task', async () =
     );
     assert.ok(issueLink, 'GitHub link should render for the issue');
 
-    // Changing the kind filter refetches with the new argument.
-    const kindSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === 'all');
-    assert.ok(kindSelect, 'kind filter should render');
-    kindSelect.props.onChange({ target: { value: 'pr' } });
-    await panel.settle();
-    const lastIssuesCall = issuesCalls()[issuesCalls().length - 1];
-    assert.equal(lastIssuesCall.args.kind, 'pr');
+    assert.ok(text.includes('Issues'), 'issues column title should render');
+    assert.ok(text.includes('Pull Requests'), 'PR column title should render');
+    const issueColumn = findRenderedNode(panel.tree, (node) => node.props.id === 'go-panel-issues-issues');
+    const prColumn = findRenderedNode(panel.tree, (node) => node.props.id === 'go-panel-issues-prs');
+    assert.ok(issueColumn, 'issues should render in their own column');
+    assert.ok(prColumn, 'PRs should render in their own column');
+    assert.ok(textOfRendered(issueColumn).includes('Fix broken login'), 'issue should be in the issue column');
+    assert.ok(!textOfRendered(issueColumn).includes('Add OAuth login'), 'PR must not leak into the issue column');
+    assert.ok(textOfRendered(prColumn).includes('Add OAuth login'), 'PR should be in the PR column');
 
     // State and limit filters are forwarded as well.
     const stateSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === 'open');

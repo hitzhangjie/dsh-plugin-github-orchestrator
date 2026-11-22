@@ -154,6 +154,10 @@ window.__ModuleLoader__.load({
           draft: '草稿',
           openLink: '在 GitHub 打开',
           empty: '没有匹配的 issue 或 PR。',
+          issuesTitle: 'Issues',
+          prsTitle: 'Pull Requests',
+          emptyIssues: '没有匹配的 issue。',
+          emptyPrs: '没有匹配的 PR。',
         },
         tasks: {
           title: '任务看板',
@@ -501,6 +505,10 @@ window.__ModuleLoader__.load({
           draft: 'Draft',
           openLink: 'Open on GitHub',
           empty: 'No matching issues or pull requests.',
+          issuesTitle: 'Issues',
+          prsTitle: 'Pull requests',
+          emptyIssues: 'No matching issues.',
+          emptyPrs: 'No matching pull requests.',
         },
         tasks: {
           title: 'Storyboard tasks',
@@ -1393,6 +1401,11 @@ window.__ModuleLoader__.load({
       '.go-check input{accent-color:var(--dsw-alias-brand-primary);width:15px;height:15px;margin:0}',
       '.go-count{margin-left:auto;font-size:12px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}',
       '.go-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}',
+      '.go-issues-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}',
+      '.go-issues-col{min-width:0;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:10px;background:var(--dsw-alias-bg-layer-1)}',
+      '.go-issues-colhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--dsw-alias-border-l1)}',
+      '.go-issues-coltitle{font-size:13px;font-weight:600;margin:0}',
+      '@media (max-width:900px){.go-issues-grid{grid-template-columns:minmax(0,1fr)}}',
       '.go-row{display:flex;align-items:flex-start;gap:10px;padding:9px 8px;border-radius:9px;min-width:0}',
       '.go-row:hover{background:var(--dsw-alias-bg-layer-2)}',
       '.go-row-main{flex:1;min-width:0}',
@@ -3173,16 +3186,6 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'go-toolbar' },
             h(SelectField, {
-              label: t.issues.kind,
-              value: issuesFilter.kind,
-              options: [
-                { value: 'all', label: t.issues.kindAll },
-                { value: 'issue', label: t.issues.kindIssue },
-                { value: 'pr', label: t.issues.kindPr },
-              ],
-              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, kind: value })),
-            }),
-            h(SelectField, {
               label: t.issues.state,
               value: issuesFilter.state,
               options: [
@@ -3220,64 +3223,81 @@ window.__ModuleLoader__.load({
             ? issuesState.status === 'error'
               ? null
               : h(Loading, { t })
-            : issueItems.length === 0
-              ? h(Empty, { text: t.issues.empty })
-              : h(
-                  'ul',
-                  { className: 'go-list', id: 'go-panel-issues' },
-                  issueItems.map((item) => {
-                    const stateTone = item.state === 'merged' ? 'success' : item.state === 'closed' ? 'warn' : item.draft ? 'warn' : null;
-                    const stateText = item.state === 'merged'
-                      ? t.issues.stateMerged
-                      : item.state === 'closed'
-                        ? t.issues.stateClosed
-                        : t.issues.stateOpen;
-                    return h(
-                      'li',
-                      { key: `${item.kind}:${item.number}`, className: 'go-row' },
-                      h('span', { className: 'go-mono' }, shortNumber(item.number)),
-                      h(Chip, { tone: item.kind === 'pr' ? 'brand' : null }, item.kind === 'pr' ? t.issues.kindPr : t.issues.kindIssue),
-                      h(Chip, { tone: stateTone }, stateText),
-                      item.draft ? h(Chip, { tone: 'warn' }, t.issues.draft) : null,
+            : (() => {
+                const renderRow = (item) => {
+                  const stateTone = item.state === 'merged' ? 'success' : item.state === 'closed' ? 'warn' : item.draft ? 'warn' : null;
+                  const stateText = item.state === 'merged'
+                    ? t.issues.stateMerged
+                    : item.state === 'closed'
+                      ? t.issues.stateClosed
+                      : t.issues.stateOpen;
+                  return h(
+                    'li',
+                    { key: `${item.kind}:${item.number}`, className: 'go-row' },
+                    h('span', { className: 'go-mono' }, shortNumber(item.number)),
+                    h(Chip, { tone: stateTone }, stateText),
+                    item.draft ? h(Chip, { tone: 'warn' }, t.issues.draft) : null,
+                    h(
+                      'div',
+                      { className: 'go-row-main' },
                       h(
-                        'div',
-                        { className: 'go-row-main' },
-                        h(
-                          'span',
-                          { className: 'go-row-title' },
-                          item.url
-                            ? h(
-                                'a',
-                                { className: 'go-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: t.issues.openLink },
-                                item.title || `#${item.number}`,
-                              )
-                            : item.title || `#${item.number}`,
-                        ),
-                        h(
-                          'span',
-                          { className: 'go-row-sub' },
-                          issuesData.repo ? h('span', null, issuesData.repo) : null,
-                          item.author ? h('span', null, t.issues.by(item.author)) : null,
-                          item.updatedAt ? h('span', { title: formatTimestamp(item.updatedAt) }, t.issues.updated(timeAgo(item.updatedAt, t))) : null,
-                          item.labels.length > 0
-                            ? h('span', { className: 'go-chips' }, item.labels.map((label) => h(Chip, { key: label }, label)))
-                            : null,
-                        ),
+                        'span',
+                        { className: 'go-row-title' },
+                        item.url
+                          ? h(
+                              'a',
+                              { className: 'go-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: t.issues.openLink },
+                              item.title || `#${item.number}`,
+                            )
+                          : item.title || `#${item.number}`,
                       ),
                       h(
-                        'div',
-                        { className: 'go-row-actions' },
-                        h(Button, {
-                          label: isBusy(`issue-task:${item.kind}:${item.number}`) ? t.issues.creatingTask : t.issues.createTask,
-                          primary: true,
-                          quiet: true,
-                          onClick: () => createTaskFromIssue(item),
-                          disabled: busy !== '',
-                        }),
+                        'span',
+                        { className: 'go-row-sub' },
+                        issuesData.repo ? h('span', null, issuesData.repo) : null,
+                        item.author ? h('span', null, t.issues.by(item.author)) : null,
+                        item.updatedAt ? h('span', { title: formatTimestamp(item.updatedAt) }, t.issues.updated(timeAgo(item.updatedAt, t))) : null,
+                        item.labels.length > 0
+                          ? h('span', { className: 'go-chips' }, item.labels.map((label) => h(Chip, { key: label }, label)))
+                          : null,
                       ),
-                    );
-                  }),
-                ),
+                    ),
+                    h(
+                      'div',
+                      { className: 'go-row-actions' },
+                      h(Button, {
+                        label: isBusy(`issue-task:${item.kind}:${item.number}`) ? t.issues.creatingTask : t.issues.createTask,
+                        primary: true,
+                        quiet: true,
+                        onClick: () => createTaskFromIssue(item),
+                        disabled: busy !== '',
+                      }),
+                    ),
+                  );
+                };
+                const renderColumn = (key, title, items, emptyText) =>
+                  h(
+                    'section',
+                    { key, className: 'go-issues-col', id: `go-panel-issues-${key}`, 'aria-label': title },
+                    h(
+                      'div',
+                      { className: 'go-issues-colhead' },
+                      h('h3', { className: 'go-issues-coltitle' }, title),
+                      h('span', { className: 'go-count' }, String(items.length)),
+                    ),
+                    items.length === 0
+                      ? h(Empty, { text: emptyText })
+                      : h('ul', { className: 'go-list' }, items.map(renderRow)),
+                  );
+                const issuesOnly = issueItems.filter((item) => item.kind !== 'pr');
+                const prsOnly = issueItems.filter((item) => item.kind === 'pr');
+                return h(
+                  'div',
+                  { className: 'go-issues-grid' },
+                  renderColumn('issues', t.issues.issuesTitle, issuesOnly, t.issues.emptyIssues),
+                  renderColumn('prs', t.issues.prsTitle, prsOnly, t.issues.emptyPrs),
+                );
+              })(),
         );
       } else if (tab === 'tasks') {
         body = h(
