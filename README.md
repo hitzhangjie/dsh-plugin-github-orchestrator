@@ -82,11 +82,14 @@ The sidebar panel contains:
   After approving, press *I authorized, continue*; the token is stored in the
   credentials service and the panel switches to the signed-in state. *Sign out*
   deletes the stored credential.
-- **Right-side Agent chat** — the floating *Agent chat* button at the bottom-right
-  opens a docked chat bound to the always-on watcher session: recent messages and
-  tool calls, running/idle state, a composer to dispatch work, and *open in main
-  view*. It is also reachable from the dispatch card's *Dispatch in the
-  right-side chat* button.
+- **Right-side Agent chat** — a native right-sidebar tab (not an overlay): the
+  dispatch card's *Agent chat* button opens it, the page also appears in the
+  right sidebar's guide, and it lists the live chat sessions (the watcher is
+  marked and selected by default) so you can switch between them. It shows the
+  selected session's recent messages and tool calls, running/idle state, and a
+  composer that sends to that session. The right sidebar's own collapse/close
+  controls still belong to the Harness, so closing the chat cannot close the
+  app.
 - **Inbox** — unread events with kind chips, repository, branch/PR/issue links
   and the linked task id; mark one or all as read.
 - **Issues/PRs** — the current open/closed issue and pull-request backlog (not
@@ -123,13 +126,13 @@ the GitHub/worktree/storyboard tools. There are two ways to put it to work:
    `git_sync` itself. This is the most flexible path, and the same session can
    keep steering the work.
 
-2. **Panel → “派任务给 Agent” / right-side chat** — the dispatch card can open
-   the **right-side Agent chat** (or use the floating “Agent chat” button at the
-   bottom-right of the window). That chat is bound to the persistent watcher
-   session: it shows the watcher's recent messages and tool calls, and every
-   message you send there is delivered to the same always-on agent — it creates
-   the watcher session on first use. *Open in main view* jumps to the full
-   conversation whenever you want the complete transcript.
+2. **Panel → Agent chat** — the dispatch card now just opens the native
+   **right-sidebar Agent chat tab**. That tab lists the live sessions (the
+   watcher is marked and selected by default), shows recent messages and tool
+   calls, and sends your message to the selected session. If the panel is the
+   active main view, opening the chat first switches to the watcher conversation
+   so the right sidebar has a session to attach to. *Open in main view* jumps to
+   the full transcript when you need it.
 
 Both paths use the same tools and state (event inbox, tasks, storyboard), so a
 task dispatched from the panel is the same task you can follow from the chat

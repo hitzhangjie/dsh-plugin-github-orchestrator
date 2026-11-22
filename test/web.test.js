@@ -616,15 +616,15 @@ test('apply(ctx) registers the sidebar icon and the main page under one key', ()
 
   mod.apply(ctx);
 
-  assert.deepEqual(injected, ['sidebar.panellist', 'main', 'shell.overlay']);
+  assert.deepEqual(injected, ['sidebar.panellist', 'main', 'sidebar.right.pane.tab']);
 
   const sidebar = registered.find((entry) => entry.meta.name === 'sidebar.panellist');
   const main = registered.find((entry) => entry.meta.name === 'main');
-  const chat = registered.find((entry) => entry.meta.name === 'shell.overlay');
+  const chat = registered.find((entry) => entry.meta.name === 'sidebar.right.pane.tab');
   assert.ok(sidebar, 'sidebar.panellist must be registered');
   assert.ok(main, 'main page must be registered');
-  assert.ok(chat, 'right-side agent chat must be registered in shell.overlay');
-  assert.equal(chat.meta.id, 'github-orchestrator-chat');
+  assert.ok(chat, 'right-sidebar Agent chat body must be registered');
+  assert.equal(chat.meta.key, '@hitzhangjie/dsh-plugin-github-orchestrator/right-chat');
   assert.equal(typeof chat.component, 'function');
   assert.equal(sidebar.meta.id, 'github-orchestrator');
   assert.equal(sidebar.meta.order, 30);
@@ -1145,8 +1145,8 @@ async function renderPanel(options = {}) {
 }
 
 /**
- * Boot the browser half and render the right-side Agent chat overlay with fake
- * session services. Returns the rendered tree plus recorded HTTP calls.
+ * Boot the browser half and render the right-sidebar Agent chat tab body with
+ * fake session services. Returns the rendered tree plus recorded HTTP calls.
  */
 async function renderChat(options = {}) {
   const snapshot = options.snapshot ?? panelSnapshot();
@@ -1162,6 +1162,7 @@ async function renderChat(options = {}) {
       skipped: 0,
     };
   }
+  snapshot.dispatch.sessionId = 'session-watcher-1';
   const windowState = options.windowState ?? {
     entries: [
       {
@@ -1184,7 +1185,20 @@ async function renderChat(options = {}) {
       },
     ],
   };
-  const { fetchImpl, calls, actions } = makePanelFetch(snapshot, options);
+  const sessionsList = {
+    sessions: [
+      { id: 'session-watcher-1', isWatcher: true, cwd: PANEL_WORKSPACE, live: true },
+      { id: 'session-conversation-2', isWatcher: false, cwd: PANEL_WORKSPACE, live: true },
+    ],
+    watcherSessionId: 'session-watcher-1',
+  };
+  const optionAction = options.actionResult;
+  const actionResult = (body) => {
+    if (body.tool === 'github_dispatch' && body.args.action === 'sessions') return sessionsList;
+    if (optionAction) return optionAction(body);
+    return { ok: true };
+  };
+  const { fetchImpl, calls, actions } = makePanelFetch(snapshot, { ...options, actionResult });
   const react = createTestReact();
   const spec = loadClientModule({ fetch: fetchImpl, document: { hidden: false }, navigator: {} });
   const mod = spec.factory(() => react.React);
@@ -1224,15 +1238,15 @@ async function renderChat(options = {}) {
     },
   };
   mod.apply(ctx);
-  const overlay = registered.find((entry) => entry.meta.name === 'shell.overlay');
-  assert.ok(overlay, 'shell.overlay chat must be registered');
+  const tab = registered.find((entry) => entry.meta.name === 'sidebar.right.pane.tab');
+  assert.ok(tab, 'sidebar.right.pane.tab chat body must be registered');
   const state = {
-    tree: await react.settle(overlay.component, {}),
+    tree: await react.settle(tab.component, {}),
     calls,
     actions,
     opened,
     async settle() {
-      state.tree = await react.settle(overlay.component, {});
+      state.tree = await react.settle(tab.component, {});
       return state.tree;
     },
     dispose() {
@@ -1429,58 +1443,32 @@ test('panel sends repo, task, worktree and settings actions through POST /action
   }
 });
 
-test('panel dispatches a task to a new session through the client session services', async () => {
-  const created = [];
-  const prompts = [];
-  const opened = [];
-  const sessions = {
-    async create(options) {
-      created.push(options);
-      return 'session-github-task-1';
-    },
-    async using(sessionId, options, operation) {
-      return operation({
-        sessionId,
-        binding: {
-          session: {
-            async prompt(content, mode) {
-              prompts.push({ sessionId, content, mode });
-              return { ok: true, value: { accepted: true } };
-            },
-          },
-        },
-      });
+test('panel opens the right-sidebar Agent chat through the sidebar service', async () => {
+  const openedTabs = [];
+  const openedSessions = [];
+  const sidebarRight = {
+    mounted: { getSnapshot: () => undefined },
+    openTab(kind) {
+      openedTabs.push(kind);
     },
   };
   const uiWorkspace = {
     openSession(sessionId) {
-      opened.push(sessionId);
+      openedSessions.push(sessionId);
     },
   };
   const panel = await renderPanel({
     ctxExtra: {
-      inject(deps, callback) {
-        callback({ sessions, uiWorkspace });
+      inject(_deps, callback) {
+        callback({ sessions: null, uiWorkspace, sidebarRight });
       },
     },
   });
   try {
-    const textarea = findRenderedNode(panel.tree, (node) => node.tag === 'textarea');
-    assert.ok(textarea, 'dispatch textarea should be rendered');
-    textarea.props.onChange({ target: { value: '处理 T1：创建 worktree 并实现' } });
-    await panel.settle();
-    await clickRenderedButton(panel, '新建会话并派单');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await panel.settle();
-
-    assert.equal(created.length, 1);
-    assert.equal(created[0].cwd, PANEL_WORKSPACE);
-    assert.equal(prompts.length, 1);
-    assert.equal(prompts[0].sessionId, 'session-github-task-1');
-    assert.equal(prompts[0].mode, 'queue');
-    assert.equal(JSON.stringify(prompts[0].content), JSON.stringify([{ type: 'text', text: '处理 T1：创建 worktree 并实现' }]));
-    assert.deepEqual(opened, ['session-github-task-1']);
-    assert.match(textOfRendered(panel.tree), /已创建会话并发送任务/);
+    await clickRenderedButton(panel, 'Agent 聊天');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assert.deepEqual(openedSessions, ['session-watcher-1']);
+    assert.deepEqual(openedTabs, ['github-orchestrator-chat']);
   } finally {
     panel.dispose();
   }
@@ -1707,16 +1695,10 @@ test('issues and automation tabs render English copy', async () => {
   }
 });
 
-test('right-side Agent chat renders watcher history and sends tasks', async () => {
+test('right-side Agent chat tab renders watcher history, sessions and sends tasks', async () => {
   const chat = await renderChat();
   try {
-    const fab = findRenderedNode(
-      chat.tree,
-      (node) => node.tag === 'button' && String(node.props.className || '').includes('go-chat-fab'),
-    );
-    assert.ok(fab, 'closed chat should render a launcher button');
-    fab.props.onClick();
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 3; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
       await chat.settle();
     }
@@ -1726,6 +1708,11 @@ test('right-side Agent chat renders watcher history and sends tasks', async () =
     assert.ok(text.includes('处理 PR #139'), 'user message should render');
     assert.ok(text.includes('我正在处理 PR #139'), 'assistant message should render');
     assert.ok(text.includes('Agent 工作中'), 'running state should render');
+    assert.ok(text.includes('Watcher'), 'session list should mark the watcher session');
+
+    const sessionSelect = findRenderedNode(chat.tree, (node) => node.tag === 'select');
+    assert.ok(sessionSelect, 'session list should render');
+    assert.equal(sessionSelect.props.value, 'session-watcher-1');
 
     const textarea = findRenderedNode(chat.tree, (node) => node.tag === 'textarea');
     assert.ok(textarea, 'chat composer should render');
@@ -1741,7 +1728,7 @@ test('right-side Agent chat renders watcher history and sends tasks', async () =
     await chat.settle();
 
     const action = chat.actions.find((entry) => entry.tool === 'github_dispatch' && entry.args.action === 'send');
-    assert.ok(action, 'sending must call github_dispatch action=send');
+    assert.ok(action, 'sending to the watcher must call github_dispatch action=send');
     assert.equal(action.args.text, '帮我处理 review');
     assert.ok(chat.calls.every((url) => url.startsWith(PANEL_ROUTE)), 'chat must only call the plugin API');
   } finally {

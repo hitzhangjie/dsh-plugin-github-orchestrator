@@ -34,7 +34,7 @@ import { resolveOAuthClientId, startDeviceFlow, pollDeviceFlow, fetchGitHubUser,
 import { setGitAuthProvider } from './lib/git.js';
 import { registerWebRoutes } from './lib/web.js';
 
-export const inject = ['tools', 'agents'];
+export const inject = ['tools', 'agents', 'sessions'];
 
 export const name = 'github-orchestrator';
 
@@ -361,6 +361,24 @@ export async function apply(ctx, rawConfig = {}) {
     return dispatcher.handleEvents(unread);
   };
   const dispatchSend = async (text) => dispatcher.sendToWatcher(text);
+  const listSessions = () => {
+    const watcherSessionId = dispatcher.status().sessionId;
+    let sessions = [];
+    try {
+      sessions = ctx.sessions.list().map((session) => ({
+        id: session.id,
+        cwd: session.header?.cwd ?? null,
+        createdAt: session.header?.createdAt ?? null,
+        isWatcher: session.id === watcherSessionId,
+      }));
+    } catch {
+      sessions = [];
+    }
+    if (watcherSessionId && !sessions.some((session) => session.id === watcherSessionId)) {
+      sessions.unshift({ id: watcherSessionId, cwd: config.workspaceRoot, createdAt: null, isWatcher: true, live: false });
+    }
+    return { sessions, watcherSessionId };
+  };
 
   let dispatchTimer = null;
   const clearDispatchTimer = () => {
@@ -478,6 +496,7 @@ export async function apply(ctx, rawConfig = {}) {
     dispatchStatus,
     dispatchTick,
     dispatchSend,
+    listSessions,
     snapshot,
     invokeTool,
   };
