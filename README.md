@@ -137,8 +137,9 @@ cycle the dispatcher:
 
 1. takes newly observed, unread, non-baseline events for the configured kinds
    (default `issue`, `pr`, `review`),
-2. de-duplicates them against its persisted `dispatch.json` and applies a
-   minimum interval to avoid storms,
+2. de-duplicates them against its persisted `dispatch.json`, ignores the
+   plugin's own `[Storyboard]`/`[Tn]` issues (no self-trigger loop), and
+   applies a minimum interval to avoid storms,
 3. creates one local storyboard task per event (`[GitHub] repo#123 title`,
    linked to the issue/PR number),
 4. delivers a structured instruction prompt to one persistent **watcher
