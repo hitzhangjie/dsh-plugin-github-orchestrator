@@ -85,7 +85,9 @@ it('activates, registers tools and exposes a runtime context section', async () 
       'git_worktree',
       'github_auth',
       'github_config',
+      'github_dispatch',
       'github_events',
+      'github_issues',
       'github_repos',
       'github_tasks',
     ]);
@@ -137,7 +139,7 @@ it('activates without a token and without repositories', async () => {
   try {
     const { ctx, registered, contexts, disposeAll } = fakeContext();
     await apply(ctx, { workspaceRoot: path.join(root, 'workspace'), repos: [] });
-    assert.equal(registered.length, 7);
+    assert.equal(registered.length, 9);
     assert.match(contexts[0].text(), /no repositories configured yet/);
     const shown = await registered.find((tool) => tool.name === 'github_config').execute({ action: 'show' }, {});
     assert.equal(shown.poller.running, false);

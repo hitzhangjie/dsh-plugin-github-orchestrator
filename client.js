@@ -20,9 +20,27 @@ window.__ModuleLoader__.load({
     const ROUTE = '/api/github-orchestrator';
     const PANEL_ID = 'github-orchestrator';
     const REFRESH_MS = 15000;
-    const TAB_KEYS = ['inbox', 'tasks', 'repos', 'worktrees', 'settings'];
+    // Issues/PRs sits between Inbox and Tasks; Automation is deliberately last.
+    const TAB_KEYS = ['inbox', 'issues', 'tasks', 'repos', 'worktrees', 'settings', 'automation'];
     const EVENT_LIMITS = [20, 50, 100, 200];
     const TASK_STATUSES = ['backlog', 'ready', 'in_progress', 'review', 'done'];
+    const ISSUE_KINDS = ['all', 'issue', 'pr'];
+    const ISSUE_STATES = ['open', 'closed', 'all'];
+    const ISSUE_LIMITS = [10, 20, 30, 50, 100];
+    const DEFAULT_AUTO_DISPATCH_KINDS = ['issue', 'pr', 'review'];
+    const AUTO_DISPATCH_KINDS = ['issue', 'pr', 'review', 'push', 'comment'];
+    const DEFAULT_DISPATCH = {
+      enabled: false,
+      sessionId: null,
+      lastDispatchAt: null,
+      count: 0,
+      lastError: null,
+      lastEventAt: null,
+      seen: 0,
+      skipped: 0,
+      kinds: [],
+      minIntervalSec: null,
+    };
 
     // ---------------------------------------------------------------------
     // Embedded copy (zh default, en when the locale service reports English)
@@ -55,10 +73,12 @@ window.__ModuleLoader__.load({
         },
         tabs: {
           inbox: '收件箱',
+          issues: '议题/PR',
           tasks: '任务',
           repos: '仓库',
           worktrees: '工作树',
           settings: '设置',
+          automation: '自动化',
         },
         common: {
           loading: '加载中…',
@@ -103,6 +123,34 @@ window.__ModuleLoader__.load({
           emptyUnread: '没有未读事件。',
           polled: (added) => (added > 0 ? `轮询完成，新增 ${added} 条事件。` : '轮询完成，没有新事件。'),
           updated: (time) => `更新于 ${time}`,
+        },
+        issues: {
+          title: 'Issues 与 Pull Requests',
+          hint: '直接读取 GitHub 上的 issue 与 PR；创建任务会把条目写入本地故事板，并同步到 GitHub issue。',
+          kind: '类型',
+          kindAll: '全部',
+          kindIssue: 'Issue',
+          kindPr: 'PR',
+          state: '状态',
+          stateAll: '全部',
+          stateOpen: '打开',
+          stateClosed: '已关闭',
+          stateMerged: '已合并',
+          repo: '仓库',
+          allRepos: '全部仓库',
+          limit: '数量',
+          count: (n) => `${n} 条`,
+          createTask: '创建任务',
+          creatingTask: '创建中…',
+          taskCreated: (id) => `已创建任务 ${id}。`,
+          taskCreatedGeneric: '已创建任务。',
+          taskNeedsRepo: '请先在仓库下拉框中选择一个仓库，再创建任务。',
+          by: (author) => `作者 ${author}`,
+          labels: (names) => `标签：${names.join('、')}`,
+          updated: (time) => `更新于 ${time}`,
+          draft: '草稿',
+          openLink: '在 GitHub 打开',
+          empty: '没有匹配的 issue 或 PR。',
         },
         tasks: {
           title: '任务看板',
@@ -202,6 +250,61 @@ window.__ModuleLoader__.load({
           workspaceExists: '目录存在',
           intervalUnit: '秒',
         },
+        automation: {
+          title: '自动化',
+          hint: '始终开启的 GitHub 事件派发：新的 issue / PR / review / push 会自动创建任务，并发送给一个常驻 watcher 会话。',
+          autoTitle: '自动派发',
+          autoHint: '新事件会自动变成任务并派给 watcher 会话；关闭后只记录事件，不自动派发。',
+          enabled: '始终开启自动派发',
+          enabledOn: '已开启',
+          enabledOff: '已关闭',
+          kinds: '监听的类型',
+          minInterval: '最小间隔',
+          minIntervalUnit: '秒',
+          minIntervalHint: '两次自动派发之间至少间隔的秒数（30–3600）。',
+          save: '保存',
+          saving: '保存中…',
+          saved: '自动化设置已保存。',
+          invalidInterval: '最小间隔必须是 30 到 3600 之间的整数。',
+          statusTitle: '派发状态',
+          watcher: 'Watcher 会话',
+          noSession: '还没有 watcher 会话，触发一次检查后会自动创建。',
+          openWatcher: '打开 watcher 会话',
+          watcherUnavailable: '当前 Harness 没有会话界面，无法打开 watcher 会话。',
+          noWatcherSession: '还没有 watcher 会话可打开。',
+          lastDispatch: '上次派发',
+          dispatchCount: '派发次数',
+          lastEvent: '最近事件',
+          seen: '已处理事件',
+          skipped: '跳过事件',
+          lastError: '最近错误',
+          noError: '无',
+          never: '从未',
+          runCheck: '立即检查一次',
+          running: '检查中…',
+          checkDispatched: (n) => `已派发 ${n} 条事件到 watcher。`,
+          checkDispatchedGeneric: '已派发事件到 watcher。',
+          checkIdle: (reason) => `本次没有派发：${reason}。`,
+          checkUnknownReason: '没有可派发的事件',
+          reasons: {
+            'no-events': '没有新事件',
+            'no-candidates': '没有符合条件的事件',
+            throttled: '未到最小间隔',
+            disabled: '自动派发已关闭',
+          },
+          refreshStatus: '刷新状态',
+          refreshingStatus: '刷新中…',
+          statusRefreshed: '派发状态已刷新。',
+          sendTitle: '直接发送给 watcher',
+          sendHint: '把一条消息直接发到 watcher 会话，不影响自动派发。',
+          sendPlaceholder: '例如：处理收件箱里最新的 review 请求，创建 worktree 并实现。',
+          send: '发送',
+          sending: '发送中…',
+          sendEmpty: '请先输入要发送的内容。',
+          sent: (sessionId) => `已发送到会话 ${sessionId}。`,
+          sentGeneric: '已发送给 watcher。',
+          enabledBadge: '自动派发开启',
+        },
         auth: {
           title: 'GitHub 账号',
           signedIn: (login) => `已登录：${login}`,
@@ -284,10 +387,12 @@ window.__ModuleLoader__.load({
         },
         tabs: {
           inbox: 'Inbox',
+          issues: 'Issues/PRs',
           tasks: 'Tasks',
           repos: 'Repos',
           worktrees: 'Worktrees',
           settings: 'Settings',
+          automation: 'Automation',
         },
         common: {
           loading: 'Loading…',
@@ -332,6 +437,34 @@ window.__ModuleLoader__.load({
           emptyUnread: 'No unread events.',
           polled: (added) => (added > 0 ? `Poll finished: ${added} new event(s).` : 'Poll finished: no new events.'),
           updated: (time) => `Updated ${time}`,
+        },
+        issues: {
+          title: 'Issues and pull requests',
+          hint: 'Reads issues and pull requests directly from GitHub; creating a task adds it to the local storyboard and mirrors it to a GitHub issue.',
+          kind: 'Kind',
+          kindAll: 'All',
+          kindIssue: 'Issue',
+          kindPr: 'PR',
+          state: 'State',
+          stateAll: 'All',
+          stateOpen: 'Open',
+          stateClosed: 'Closed',
+          stateMerged: 'Merged',
+          repo: 'Repository',
+          allRepos: 'All repositories',
+          limit: 'Limit',
+          count: (n) => `${n} item(s)`,
+          createTask: 'Create task',
+          creatingTask: 'Creating…',
+          taskCreated: (id) => `Created task ${id}.`,
+          taskCreatedGeneric: 'Task created.',
+          taskNeedsRepo: 'Pick a repository in the dropdown before creating a task.',
+          by: (author) => `by ${author}`,
+          labels: (names) => `Labels: ${names.join(', ')}`,
+          updated: (time) => `Updated ${time}`,
+          draft: 'Draft',
+          openLink: 'Open on GitHub',
+          empty: 'No matching issues or pull requests.',
         },
         tasks: {
           title: 'Storyboard tasks',
@@ -430,6 +563,61 @@ window.__ModuleLoader__.load({
           apiBase: 'GitHub API',
           workspaceExists: 'Directory exists',
           intervalUnit: 's',
+        },
+        automation: {
+          title: 'Automation',
+          hint: 'Always-on GitHub event dispatch: new issues, pull requests, reviews and pushes become tasks and are delivered to one persistent watcher session.',
+          autoTitle: 'Auto dispatch',
+          autoHint: 'New events become tasks and are sent to the watcher session; when off, events are recorded only.',
+          enabled: 'Always-on auto dispatch',
+          enabledOn: 'On',
+          enabledOff: 'Off',
+          kinds: 'Event kinds',
+          minInterval: 'Minimum interval',
+          minIntervalUnit: 's',
+          minIntervalHint: 'Minimum number of seconds between two automatic dispatches (30–3600).',
+          save: 'Save',
+          saving: 'Saving…',
+          saved: 'Automation settings saved.',
+          invalidInterval: 'Minimum interval must be an integer between 30 and 3600 seconds.',
+          statusTitle: 'Dispatch status',
+          watcher: 'Watcher session',
+          noSession: 'No watcher session yet; run a check once to create it automatically.',
+          openWatcher: 'Open watcher session',
+          watcherUnavailable: 'This Harness exposes no session UI, so the watcher session cannot be opened.',
+          noWatcherSession: 'No watcher session to open yet.',
+          lastDispatch: 'Last dispatch',
+          dispatchCount: 'Dispatches',
+          lastEvent: 'Last event',
+          seen: 'Events seen',
+          skipped: 'Events skipped',
+          lastError: 'Last error',
+          noError: 'none',
+          never: 'never',
+          runCheck: 'Run check now',
+          running: 'Checking…',
+          checkDispatched: (n) => `Dispatched ${n} event(s) to the watcher.`,
+          checkDispatchedGeneric: 'Dispatched events to the watcher.',
+          checkIdle: (reason) => `Nothing dispatched: ${reason}.`,
+          checkUnknownReason: 'no dispatchable events',
+          reasons: {
+            'no-events': 'no new events',
+            'no-candidates': 'no matching events',
+            throttled: 'minimum interval not reached',
+            disabled: 'auto dispatch is off',
+          },
+          refreshStatus: 'Refresh status',
+          refreshingStatus: 'Refreshing…',
+          statusRefreshed: 'Dispatch status refreshed.',
+          sendTitle: 'Send to watcher',
+          sendHint: 'Send one message straight to the watcher session; this does not change automatic dispatch.',
+          sendPlaceholder: 'e.g. handle the newest review request in the inbox, create the worktree and implement it.',
+          send: 'Send',
+          sending: 'Sending…',
+          sendEmpty: 'Enter a message first.',
+          sent: (sessionId) => `Sent to session ${sessionId}.`,
+          sentGeneric: 'Sent to the watcher.',
+          enabledBadge: 'Auto dispatch on',
         },
         auth: {
           title: 'GitHub account',
@@ -786,6 +974,7 @@ window.__ModuleLoader__.load({
         },
         repos,
         worktreeCount: countWorktrees(root.worktrees),
+        dispatch: normalizeDispatch(root.dispatch ?? root.dispatcher, root, config),
       };
     }
 
@@ -936,6 +1125,119 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Normalize a `github_issues action=list` payload. The Host returns
+     * `{ok, repo, kind, state, count, items}`; older/tolerant shapes are
+     * accepted as well so a Host refactor cannot blank the tab.
+     * @param {unknown} data
+     */
+    function normalizeIssues(data) {
+      const raw = asObject(data);
+      let list = [];
+      for (const key of ['items', 'issues', 'pulls', 'workItems']) {
+        if (Array.isArray(raw[key])) {
+          list = raw[key];
+          break;
+        }
+      }
+      if (list.length === 0 && Array.isArray(raw.data)) list = raw.data;
+      if (list.length === 0 && Array.isArray(data)) list = data;
+      const items = list.map(normalizeIssueItem);
+      return {
+        repo: asText(raw.repo),
+        kind: asText(raw.kind),
+        state: asText(raw.state),
+        items,
+        count: asNumber(raw.count) ?? items.length,
+      };
+    }
+
+    /** @param {unknown} entry */
+    function normalizeIssueItem(entry) {
+      const raw = asObject(entry);
+      const stateText = asText(raw.state).toLowerCase();
+      const merged = raw.merged === true || stateText === 'merged' || raw.mergedAt !== undefined || raw.merged_at !== undefined;
+      const isPull = raw.isPull === true || asText(raw.kind).toLowerCase() === 'pr' || (raw.pull_request !== undefined && raw.pull_request !== null);
+      const labels = asArray(raw.labels)
+        .map((label) => (typeof label === 'string' ? label.trim() : asText(asObject(label).name)))
+        .filter((label) => label.length > 0);
+      const assignees = asArray(raw.assignees)
+        .map((entryValue) => (typeof entryValue === 'string' ? entryValue.trim() : asText(asObject(entryValue).login)))
+        .filter((assignee) => assignee.length > 0);
+      return {
+        kind: isPull ? 'pr' : 'issue',
+        repo: asText(raw.repo),
+        number: asNumber(raw.number),
+        title: asText(raw.title),
+        state: merged ? 'merged' : stateText || 'open',
+        url: safeUrl(raw.url),
+        author: asText(raw.author) || asText(asObject(raw.user).login),
+        labels,
+        assignees,
+        comments: asNumber(raw.comments) ?? 0,
+        createdAt: raw.createdAt ?? raw.created_at ?? null,
+        updatedAt: raw.updatedAt ?? raw.updated_at ?? null,
+        draft: raw.draft === true,
+        merged,
+        mergedAt: raw.mergedAt ?? raw.merged_at ?? null,
+        headRef: asText(raw.headRef) || asText(asObject(raw.head).ref),
+        baseRef: asText(raw.baseRef) || asText(asObject(raw.base).ref),
+        body: asText(raw.body),
+      };
+    }
+
+    /**
+     * Normalize the always-on dispatcher status. `snapshot.dispatch` is the
+     * authoritative source; `snapshot.autoDispatch` (and a `config.autoDispatch`
+     * block) may carry the persisted settings that the status object omits.
+     * @param {unknown} raw
+     * @param {unknown} root
+     * @param {unknown} config
+     */
+    function normalizeDispatch(raw, root, config) {
+      const source = asObject(raw);
+      const rootObject = asObject(root);
+      const auto = asObject(rootObject.autoDispatch);
+      const configAuto = asObject(asObject(config).autoDispatch);
+      const first = (...values) => {
+        for (const value of values) {
+          if (value !== undefined && value !== null) return value;
+        }
+        return undefined;
+      };
+      const kindsSource = first(
+        source.kinds,
+        source.autoDispatchKinds,
+        auto.kinds,
+        rootObject.autoDispatchKinds,
+        configAuto.kinds,
+      );
+      const kinds = Array.isArray(kindsSource)
+        ? kindsSource.map((kind) => asText(kind)).filter((kind) => kind.length > 0)
+        : [];
+      const rootAutoBoolean = typeof rootObject.autoDispatch === 'boolean' ? rootObject.autoDispatch : undefined;
+      const enabled = first(source.enabled, auto.enabled, rootAutoBoolean, configAuto.enabled) === true;
+      const minIntervalSec = asNumber(first(
+        source.minIntervalSec,
+        source.autoDispatchMinIntervalSec,
+        auto.minIntervalSec,
+        rootObject.autoDispatchMinIntervalSec,
+        configAuto.minIntervalSec,
+      ));
+      return {
+        enabled,
+        sessionId: asText(source.sessionId) || asText(auto.sessionId) || null,
+        lastDispatchAt: source.lastDispatchAt ?? null,
+        count: asNumber(source.count) ?? 0,
+        lastError: asText(source.lastError) || null,
+        lastEventAt: source.lastEventAt ?? null,
+        seen: asNumber(source.seen) ?? 0,
+        skipped: asNumber(source.skipped) ?? 0,
+        kinds,
+        minIntervalSec,
+      };
+    }
+
+    /**
      * Read a pending device-flow code from a tool result.
      * @param {unknown} data
      */
@@ -1051,6 +1353,11 @@ window.__ModuleLoader__.load({
       '.go-dispatch-input{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;border-radius:9px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:1.45;padding:8px 10px;outline:none;margin-top:6px}',
       '.go-dispatch-input:focus{border-color:var(--dsw-alias-brand-primary)}',
       '.go-dispatch-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-start;flex:none}',
+      '.go-chips{display:flex;gap:4px;flex-wrap:wrap;min-width:0}',
+      '.go-checkrow{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:6px}',
+      '.go-statusline{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.go-watcher{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}',
+      '.go-watcher code{background:var(--dsw-alias-bg-layer-2);padding:1px 6px;border-radius:5px;font-size:11.5px;overflow-wrap:anywhere}',
       '.go-footer{flex:none;padding:10px 24px 14px;font-size:11.5px;color:var(--dsw-alias-label-secondary);border-top:1px solid var(--dsw-alias-border-l1);display:flex;gap:16px;flex-wrap:wrap}',
       '.go-footer code{background:var(--dsw-alias-bg-layer-2);padding:1px 5px;border-radius:5px;font-size:11px;overflow-wrap:anywhere}',
       '@media (max-width:860px){.go-head,.go-tabs,.go-body{padding-left:14px;padding-right:14px}.go-auth{margin-left:14px;margin-right:14px}.go-dispatch{margin-left:14px;margin-right:14px}.go-banner{margin-left:14px;margin-right:14px}}',
@@ -1291,11 +1598,23 @@ window.__ModuleLoader__.load({
       const [eventsState, setEventsState] = useState({ status: 'idle', data: null, error: null });
       const [tasksState, setTasksState] = useState({ status: 'idle', data: null, error: null });
       const [worktreesState, setWorktreesState] = useState({ status: 'idle', data: null, error: null });
+      const [issuesState, setIssuesState] = useState({ status: 'idle', data: null, error: null });
 
       const [inboxFilter, setInboxFilter] = useState({ unreadOnly: true, limit: 50, repo: '' });
+      const [issuesFilter, setIssuesFilter] = useState({ kind: 'all', state: 'open', repo: '', limit: 30 });
       const [taskFilter, setTaskFilter] = useState({ status: 'open', repo: '' });
       const [settingsDraft, setSettingsDraft] = useState({ workspaceRoot: '', pollIntervalSec: 120 });
       const [settingsDirty, setSettingsDirty] = useState(false);
+
+      const [automationDraft, setAutomationDraft] = useState({
+        enabled: false,
+        kinds: DEFAULT_AUTO_DISPATCH_KINDS.slice(),
+        minIntervalSec: 120,
+      });
+      const [automationDirty, setAutomationDirty] = useState(false);
+      const [automationError, setAutomationError] = useState(null);
+      const [watcherDraft, setWatcherDraft] = useState('');
+      const [dispatchOverride, setDispatchOverride] = useState(null);
 
       const [authOpen, setAuthOpen] = useState(false);
       const [authPhase, setAuthPhase] = useState('idle'); // idle | starting | pending | polling | done | error
@@ -1314,7 +1633,10 @@ window.__ModuleLoader__.load({
       const requestSeq = useRef(0);
       const tabRef = useRef(tab);
       const inboxFilterRef = useRef(inboxFilter);
+      const issuesFilterRef = useRef(issuesFilter);
+      const repoDefaultRef = useRef('');
       const settingsDirtyRef = useRef(settingsDirty);
+      const automationDirtyRef = useRef(automationDirty);
 
       useEffect(() => {
         tabRef.current = tab;
@@ -1323,8 +1645,17 @@ window.__ModuleLoader__.load({
         inboxFilterRef.current = inboxFilter;
       }, [inboxFilter]);
       useEffect(() => {
+        issuesFilterRef.current = issuesFilter;
+      }, [issuesFilter]);
+      useEffect(() => {
+        repoDefaultRef.current = snapshot && snapshot.repos.length > 0 ? snapshot.repos[0].repo : '';
+      }, [snapshot]);
+      useEffect(() => {
         settingsDirtyRef.current = settingsDirty;
       }, [settingsDirty]);
+      useEffect(() => {
+        automationDirtyRef.current = automationDirty;
+      }, [automationDirty]);
 
       const showToast = useCallback((message) => {
         if (!message) return;
@@ -1353,6 +1684,7 @@ window.__ModuleLoader__.load({
           const normalized = normalizeSnapshot(data);
           setSnapshot(normalized);
           setSnapshotError(null);
+          setDispatchOverride(null);
           if (!settingsDirtyRef.current) {
             setSettingsDraft({
               workspaceRoot: normalized.workspaceRoot,
@@ -1411,13 +1743,40 @@ window.__ModuleLoader__.load({
         }
       }, []);
 
+      const loadIssues = useCallback(async (filter) => {
+        setIssuesState((previous) => ({ ...previous, status: previous.data ? previous.status : 'loading', error: null }));
+        try {
+          const repo = asText(filter.repo) || repoDefaultRef.current;
+          const args = {
+            action: 'list',
+            kind: filter.kind,
+            state: filter.state,
+            limit: Number(filter.limit),
+          };
+          if (repo) args.repo = repo;
+          const data = await callTool('github_issues', args);
+          const failure = toolFailure(data);
+          if (failure) throw new Error(failure);
+          const normalized = normalizeIssues(data);
+          if (!normalized.repo && repo) normalized.repo = repo;
+          setIssuesState({ status: 'ready', data: normalized, error: null });
+        } catch (error) {
+          setIssuesState((previous) => ({
+            ...previous,
+            status: previous.data ? 'ready' : 'error',
+            error: messageOf(error),
+          }));
+        }
+      }, []);
+
       const loadTab = useCallback(
         async (which) => {
           if (which === 'inbox') await loadEvents(inboxFilterRef.current);
+          else if (which === 'issues') await loadIssues(issuesFilterRef.current);
           else if (which === 'tasks') await loadTasks();
           else if (which === 'worktrees') await loadWorktrees();
         },
-        [loadEvents, loadTasks, loadWorktrees],
+        [loadEvents, loadIssues, loadTasks, loadWorktrees],
       );
 
       const refreshAll = useCallback(
@@ -1439,7 +1798,7 @@ window.__ModuleLoader__.load({
       }, [loadSnapshot]);
 
       useEffect(() => {
-        if (tab === 'settings' || tab === 'repos') return undefined;
+        if (tab === 'settings' || tab === 'repos' || tab === 'automation') return undefined;
         void loadTab(tab);
         return undefined;
       }, [tab, loadTab]);
@@ -1447,6 +1806,25 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         void loadEvents(inboxFilter);
       }, [inboxFilter, loadEvents]);
+
+      // Issues filters refetch only while the Issues/PRs tab is visible; the tab
+      // switch itself triggers the first load through loadTab.
+      useEffect(() => {
+        if (tabRef.current !== 'issues') return;
+        void loadIssues(issuesFilter);
+      }, [issuesFilter, loadIssues]);
+
+      // Keep the automation form in sync with the Host settings until the user
+      // starts editing it.
+      useEffect(() => {
+        if (!snapshot || automationDirtyRef.current) return;
+        const dispatch = snapshot.dispatch || DEFAULT_DISPATCH;
+        setAutomationDraft((previous) => ({
+          enabled: dispatch.enabled,
+          kinds: dispatch.kinds.length > 0 ? dispatch.kinds : previous.kinds,
+          minIntervalSec: dispatch.minIntervalSec ?? previous.minIntervalSec,
+        }));
+      }, [snapshot]);
 
       useEffect(() => {
         const timer = setInterval(() => {
@@ -1674,6 +2052,35 @@ window.__ModuleLoader__.load({
         [runAction, showToast, t, loadWorktrees, loadSnapshot],
       );
 
+      const createTaskFromIssue = useCallback(
+        (item) => {
+          const repo =
+            asText(item.repo) ||
+            asText(issuesState.data && issuesState.data.repo) ||
+            asText(issuesFilter.repo) ||
+            repoDefaultRef.current;
+          if (!repo) {
+            showToast(t.issues.taskNeedsRepo);
+            return;
+          }
+          const description = item.url
+            ? `GitHub ${item.kind} #${item.number}: ${item.url}`
+            : `GitHub ${item.kind} #${item.number}`;
+          void runAction(
+            `issue-task:${item.kind}:${item.number}`,
+            'github_tasks',
+            { action: 'create', repo, title: item.title || `#${item.number}`, description },
+            async (data) => {
+              const task = asObject(asObject(data).task);
+              const id = asText(task.id) || asText(asObject(data).id);
+              showToast(id ? t.issues.taskCreated(id) : t.issues.taskCreatedGeneric);
+              await loadSnapshot();
+            },
+          );
+        },
+        [issuesState.data, issuesFilter.repo, runAction, showToast, t, loadSnapshot],
+      );
+
       const saveWorkspace = useCallback(async () => {
         const workspaceRoot = asText(settingsDraft.workspaceRoot);
         if (workspaceRoot.length === 0) {
@@ -1716,6 +2123,119 @@ window.__ModuleLoader__.load({
         }
       }, [settingsDraft.pollIntervalSec, showToast, t, loadSnapshot]);
 
+      // --- automation actions ---------------------------------------------
+
+      const setAutoDispatchEnabled = useCallback((enabled) => {
+        setAutomationDirty(true);
+        setAutomationError(null);
+        setAutomationDraft((previous) => ({ ...previous, enabled }));
+      }, []);
+
+      const setAutoDispatchKind = useCallback((kind, checked) => {
+        setAutomationDirty(true);
+        setAutomationError(null);
+        setAutomationDraft((previous) => {
+          const selected = new Set(previous.kinds);
+          if (checked) selected.add(kind);
+          else selected.delete(kind);
+          return { ...previous, kinds: AUTO_DISPATCH_KINDS.filter((entry) => selected.has(entry)) };
+        });
+      }, []);
+
+      const setMinInterval = useCallback((value) => {
+        setAutomationDirty(true);
+        setAutomationError(null);
+        setAutomationDraft((previous) => ({ ...previous, minIntervalSec: value }));
+      }, []);
+
+      const saveAutomation = useCallback(async () => {
+        const interval = Number(automationDraft.minIntervalSec);
+        if (!Number.isFinite(interval) || interval < 30 || interval > 3600) {
+          showToast(t.automation.invalidInterval);
+          return;
+        }
+        setAutomationError(null);
+        setBusy('automation:save');
+        try {
+          const data = await callTool('github_config', {
+            action: 'set',
+            autoDispatch: automationDraft.enabled === true,
+            autoDispatchKinds: automationDraft.kinds.slice(),
+            autoDispatchMinIntervalSec: Math.round(interval),
+          });
+          const failure = toolFailure(data);
+          if (failure) throw new Error(failure);
+          setAutomationDirty(false);
+          showToast(t.automation.saved);
+          setDispatchOverride(null);
+          await loadSnapshot();
+        } catch (error) {
+          setAutomationError(messageOf(error));
+          showToast(messageOf(error));
+        } finally {
+          setBusy('');
+        }
+      }, [automationDraft, showToast, t, loadSnapshot]);
+
+      const runDispatchCheck = useCallback(() => {
+        void runAction('dispatch:tick', 'github_dispatch', { action: 'tick' }, async (data) => {
+          const result = asObject(data);
+          if (result.dispatched === true) {
+            const count = asArray(result.taskIds).length || asArray(result.eventIds).length || 0;
+            showToast(count > 0 ? t.automation.checkDispatched(count) : t.automation.checkDispatchedGeneric);
+          } else {
+            const reason = asText(result.reason);
+            const label = (t.automation.reasons && t.automation.reasons[reason]) || t.automation.checkUnknownReason;
+            showToast(t.automation.checkIdle(label));
+          }
+          setDispatchOverride(null);
+          await loadSnapshot();
+        });
+      }, [runAction, showToast, t, loadSnapshot]);
+
+      const refreshDispatchStatus = useCallback(() => {
+        void runAction('dispatch:status', 'github_dispatch', { action: 'status' }, async (data) => {
+          await loadSnapshot();
+          setDispatchOverride(normalizeDispatch(data));
+          showToast(t.automation.statusRefreshed);
+        });
+      }, [runAction, showToast, t, loadSnapshot]);
+
+      const sendToWatcher = useCallback(() => {
+        const text = watcherDraft.trim();
+        if (text.length === 0) {
+          showToast(t.automation.sendEmpty);
+          return;
+        }
+        void runAction('dispatch:send', 'github_dispatch', { action: 'send', text }, async (data) => {
+          const sessionId = asText(asObject(data).sessionId);
+          setWatcherDraft('');
+          setDispatchOverride(null);
+          showToast(sessionId ? t.automation.sent(sessionId) : t.automation.sentGeneric);
+          await loadSnapshot();
+        });
+      }, [watcherDraft, runAction, showToast, t, loadSnapshot]);
+
+      const openWatcherSession = useCallback(() => {
+        const info = dispatchOverride || (snapshot ? snapshot.dispatch : DEFAULT_DISPATCH);
+        const sessionId = info ? info.sessionId : null;
+        if (!sessionId) {
+          showToast(t.automation.noWatcherSession);
+          return;
+        }
+        const services = props.services || {};
+        const uiWorkspace = services.uiWorkspace;
+        if (!uiWorkspace || typeof uiWorkspace.openSession !== 'function') {
+          showToast(t.automation.watcherUnavailable);
+          return;
+        }
+        try {
+          uiWorkspace.openSession(sessionId);
+        } catch (error) {
+          showToast(messageOf(error));
+        }
+      }, [dispatchOverride, snapshot, props.services, showToast, t]);
+
       const copyDeviceCode = useCallback(async () => {
         const code = authDevice ? authDevice.userCode : '';
         if (!code) return;
@@ -1737,6 +2257,7 @@ window.__ModuleLoader__.load({
       const tokenLogin = snapshot ? snapshot.auth.login : null;
       const tokenSource = snapshot ? snapshot.auth.source : 'none';
       const tokenScopes = snapshot ? snapshot.auth.scopes : [];
+      const dispatchInfo = dispatchOverride || (snapshot ? snapshot.dispatch : DEFAULT_DISPATCH);
       const unreadCount = snapshot
         ? snapshot.eventStats.unread
         : eventsState.data
@@ -1755,14 +2276,19 @@ window.__ModuleLoader__.load({
 
       const tabBadges = {
         inbox: unreadCount > 0 ? unreadCount : null,
+        issues: issuesState.data && issuesState.data.items.length > 0 ? issuesState.data.items.length : null,
         tasks: openTaskCount > 0 ? openTaskCount : null,
         repos: snapshot && snapshot.repos.length > 0 ? snapshot.repos.length : null,
         worktrees: worktreeCount && worktreeCount > 0 ? worktreeCount : null,
         settings: null,
+        automation: dispatchInfo && dispatchInfo.enabled ? '●' : null,
       };
 
       const inboxData = eventsState.data;
       const inboxEvents = inboxData ? inboxData.events : [];
+      const issuesData = issuesState.data;
+      const issueItems = issuesData ? issuesData.items : [];
+      const autoDispatchEnabled = automationDraft.enabled === true;
       const tasksData = tasksState.data;
       const filteredTasks = useMemo(() => {
         const list = tasksData ? tasksData.tasks : [];
@@ -2188,6 +2714,120 @@ window.__ModuleLoader__.load({
                   ),
                 ),
         );
+      } else if (tab === 'issues') {
+        body = h(
+          React.Fragment,
+          null,
+          h(
+            'div',
+            { className: 'go-toolbar' },
+            h(SelectField, {
+              label: t.issues.kind,
+              value: issuesFilter.kind,
+              options: [
+                { value: 'all', label: t.issues.kindAll },
+                { value: 'issue', label: t.issues.kindIssue },
+                { value: 'pr', label: t.issues.kindPr },
+              ],
+              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, kind: value })),
+            }),
+            h(SelectField, {
+              label: t.issues.state,
+              value: issuesFilter.state,
+              options: [
+                { value: 'open', label: t.issues.stateOpen },
+                { value: 'closed', label: t.issues.stateClosed },
+                { value: 'all', label: t.issues.stateAll },
+              ],
+              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, state: value })),
+            }),
+            h(SelectField, {
+              label: t.issues.repo,
+              value: issuesFilter.repo,
+              options: [{ value: '', label: t.issues.allRepos }, ...reposForFilter.map((repo) => ({ value: repo, label: repo }))],
+              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, repo: value })),
+            }),
+            h(SelectField, {
+              label: t.issues.limit,
+              value: String(issuesFilter.limit),
+              options: ISSUE_LIMITS.map((limit) => ({ value: String(limit), label: String(limit) })),
+              onChange: (value) => setIssuesFilter((previous) => ({ ...previous, limit: Number(value) })),
+            }),
+            h(Button, {
+              label: t.refresh,
+              icon: IconRefresh(14),
+              onClick: () => void loadIssues(issuesFilterRef.current),
+              disabled: busy !== '',
+            }),
+            h('span', { className: 'go-count' }, t.issues.count(issueItems.length)),
+          ),
+          h('div', { className: 'go-section-hint', style: { marginBottom: 10 } }, t.issues.hint),
+          issuesState.error
+            ? h(ErrorNote, { message: issuesState.error, retryLabel: t.common.retry, onRetry: () => void loadIssues(issuesFilterRef.current) })
+            : null,
+          !issuesData
+            ? issuesState.status === 'error'
+              ? null
+              : h(Loading, { t })
+            : issueItems.length === 0
+              ? h(Empty, { text: t.issues.empty })
+              : h(
+                  'ul',
+                  { className: 'go-list', id: 'go-panel-issues' },
+                  issueItems.map((item) => {
+                    const stateTone = item.state === 'merged' ? 'success' : item.state === 'closed' ? 'warn' : item.draft ? 'warn' : null;
+                    const stateText = item.state === 'merged'
+                      ? t.issues.stateMerged
+                      : item.state === 'closed'
+                        ? t.issues.stateClosed
+                        : t.issues.stateOpen;
+                    return h(
+                      'li',
+                      { key: `${item.kind}:${item.number}`, className: 'go-row' },
+                      h('span', { className: 'go-mono' }, shortNumber(item.number)),
+                      h(Chip, { tone: item.kind === 'pr' ? 'brand' : null }, item.kind === 'pr' ? t.issues.kindPr : t.issues.kindIssue),
+                      h(Chip, { tone: stateTone }, stateText),
+                      item.draft ? h(Chip, { tone: 'warn' }, t.issues.draft) : null,
+                      h(
+                        'div',
+                        { className: 'go-row-main' },
+                        h(
+                          'span',
+                          { className: 'go-row-title' },
+                          item.url
+                            ? h(
+                                'a',
+                                { className: 'go-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: t.issues.openLink },
+                                item.title || `#${item.number}`,
+                              )
+                            : item.title || `#${item.number}`,
+                        ),
+                        h(
+                          'span',
+                          { className: 'go-row-sub' },
+                          issuesData.repo ? h('span', null, issuesData.repo) : null,
+                          item.author ? h('span', null, t.issues.by(item.author)) : null,
+                          item.updatedAt ? h('span', { title: formatTimestamp(item.updatedAt) }, t.issues.updated(timeAgo(item.updatedAt, t))) : null,
+                          item.labels.length > 0
+                            ? h('span', { className: 'go-chips' }, item.labels.map((label) => h(Chip, { key: label }, label)))
+                            : null,
+                        ),
+                      ),
+                      h(
+                        'div',
+                        { className: 'go-row-actions' },
+                        h(Button, {
+                          label: isBusy(`issue-task:${item.kind}:${item.number}`) ? t.issues.creatingTask : t.issues.createTask,
+                          primary: true,
+                          quiet: true,
+                          onClick: () => createTaskFromIssue(item),
+                          disabled: busy !== '',
+                        }),
+                      ),
+                    );
+                  }),
+                ),
+        );
       } else if (tab === 'tasks') {
         body = h(
           React.Fragment,
@@ -2430,7 +3070,7 @@ window.__ModuleLoader__.load({
                   ),
                 ),
         );
-      } else {
+      } else if (tab === 'settings') {
         body = h(
           React.Fragment,
           null,
@@ -2504,6 +3144,151 @@ window.__ModuleLoader__.load({
                   h('span', null, h('b', null, t.settings.workspaceExists), ' ', snapshot.workspaceExists ? t.common.yes : t.common.no),
                   h('span', null, h('b', null, t.tabs.inbox), ' ', t.inbox.count(snapshot.eventStats.total, snapshot.eventStats.unread)),
                 ),
+          ),
+        );
+      } else {
+        body = h(
+          React.Fragment,
+          null,
+          h(
+            Section,
+            null,
+            h(SectionHead, { title: t.automation.autoTitle, hint: t.automation.autoHint }),
+            h(
+              'div',
+              { className: 'go-checkrow' },
+              h(
+                'label',
+                { className: 'go-check' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: autoDispatchEnabled,
+                  'aria-label': t.automation.enabled,
+                  onChange: (event) => setAutoDispatchEnabled(event.target.checked),
+                }),
+                h('span', null, t.automation.enabled),
+              ),
+              h(
+                Chip,
+                { tone: autoDispatchEnabled ? 'success' : 'warn' },
+                autoDispatchEnabled ? t.automation.enabledOn : t.automation.enabledOff,
+              ),
+            ),
+            h(
+              'div',
+              { className: 'go-checkrow' },
+              h('span', { className: 'go-section-hint' }, t.automation.kinds),
+              AUTO_DISPATCH_KINDS.map((kind) =>
+                h(
+                  'label',
+                  { key: kind, className: 'go-check' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: automationDraft.kinds.includes(kind),
+                    'aria-label': `${t.automation.kinds}: ${kindLabel(t, kind)}`,
+                    onChange: (event) => setAutoDispatchKind(kind, event.target.checked),
+                  }),
+                  h('span', null, kindLabel(t, kind)),
+                ),
+              ),
+            ),
+            h(
+              'div',
+              { className: 'go-settings-row', style: { marginTop: 12 } },
+              h(InputField, {
+                label: `${t.automation.minInterval} (${t.automation.minIntervalUnit})`,
+                type: 'number',
+                min: 30,
+                max: 3600,
+                value: String(automationDraft.minIntervalSec),
+                onChange: (value) => setMinInterval(value),
+              }),
+              h(Button, {
+                label: isBusy('automation:save') ? t.automation.saving : t.automation.save,
+                icon: IconCheck(14),
+                primary: true,
+                onClick: () => void saveAutomation(),
+                disabled: busy !== '' || !automationDirty,
+              }),
+            ),
+            h('div', { className: 'go-section-hint', style: { marginTop: 6 } }, t.automation.minIntervalHint),
+            automationError ? h('div', { className: 'go-inline-error', role: 'alert', style: { marginTop: 6 } }, automationError) : null,
+          ),
+          h(
+            Section,
+            null,
+            h(SectionHead, { title: t.automation.statusTitle }),
+            h(
+              'div',
+              { className: 'go-statusline' },
+              h(
+                Chip,
+                { tone: dispatchInfo.enabled ? 'success' : 'warn' },
+                dispatchInfo.enabled ? t.automation.enabledOn : t.automation.enabledOff,
+              ),
+              h('span', null, `${t.automation.dispatchCount}: ${dispatchInfo.count}`),
+              h('span', null, `${t.automation.seen}: ${dispatchInfo.seen}`),
+              h('span', null, `${t.automation.skipped}: ${dispatchInfo.skipped}`),
+              h('span', null, `${t.automation.lastDispatch}: ${dispatchInfo.lastDispatchAt ? timeAgo(dispatchInfo.lastDispatchAt, t) : t.automation.never}`),
+              h('span', null, `${t.automation.lastEvent}: ${dispatchInfo.lastEventAt ? timeAgo(dispatchInfo.lastEventAt, t) : t.automation.never}`),
+            ),
+            h(
+              'div',
+              { className: 'go-watcher' },
+              h('span', { className: 'go-section-hint' }, t.automation.watcher),
+              dispatchInfo.sessionId
+                ? h('code', { title: dispatchInfo.sessionId }, dispatchInfo.sessionId)
+                : h('span', { className: 'go-section-hint' }, t.automation.noSession),
+              h(Button, {
+                label: t.automation.openWatcher,
+                onClick: openWatcherSession,
+                disabled: busy !== '' || !dispatchInfo.sessionId,
+                quiet: true,
+              }),
+            ),
+            dispatchInfo.lastError
+              ? h(ErrorNote, { message: `${t.automation.lastError}: ${dispatchInfo.lastError}` })
+              : null,
+            h(
+              'div',
+              { className: 'go-toolbar', style: { marginTop: 10, marginBottom: 0 } },
+              h(Button, {
+                label: isBusy('dispatch:tick') ? t.automation.running : t.automation.runCheck,
+                icon: IconPoll(14),
+                primary: true,
+                onClick: runDispatchCheck,
+                disabled: busy !== '',
+              }),
+              h(Button, {
+                label: isBusy('dispatch:status') ? t.automation.refreshingStatus : t.automation.refreshStatus,
+                icon: IconRefresh(14),
+                onClick: refreshDispatchStatus,
+                disabled: busy !== '',
+              }),
+            ),
+          ),
+          h(
+            Section,
+            null,
+            h(SectionHead, { title: t.automation.sendTitle, hint: t.automation.sendHint }),
+            h('textarea', {
+              className: 'go-dispatch-input',
+              rows: 3,
+              value: watcherDraft,
+              placeholder: t.automation.sendPlaceholder,
+              'aria-label': t.automation.sendTitle,
+              onChange: (event) => setWatcherDraft(event.target.value),
+            }),
+            h(
+              'div',
+              { className: 'go-toolbar', style: { marginTop: 10, marginBottom: 0 } },
+              h(Button, {
+                label: isBusy('dispatch:send') ? t.automation.sending : t.automation.send,
+                primary: true,
+                onClick: sendToWatcher,
+                disabled: busy !== '' || watcherDraft.trim().length === 0,
+              }),
+            ),
           ),
         );
       }

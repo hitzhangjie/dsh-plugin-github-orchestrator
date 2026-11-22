@@ -708,9 +708,103 @@ function panelSnapshot(overrides = {}) {
       credentialsAvailable: true,
       pending: null,
     },
+    dispatch: {
+      enabled: true,
+      sessionId: 'session-watcher-1',
+      lastDispatchAt: PANEL_ISO,
+      count: 3,
+      lastError: null,
+      lastEventAt: PANEL_ISO,
+      seen: 12,
+      skipped: 2,
+    },
+    autoDispatch: {
+      enabled: true,
+      kinds: ['issue', 'pr', 'review'],
+      minIntervalSec: 120,
+    },
     poller: { running: true, intervalSec: 120, token: true, tokenSource: 'env', watermarks: {}, lastPollAt: PANEL_ISO },
     ...overrides,
   };
+}
+
+/**
+ * Default tool results for the panel's POST /action calls. Tests can override
+ * any of them through `options.actionResult`.
+ * @param {{ tool?: string, args?: object }} body
+ */
+function defaultActionResult(body) {
+  const tool = body && body.tool;
+  const args = (body && body.args) || {};
+  if (tool === 'github_issues' && args.action === 'list') {
+    return {
+      ok: true,
+      repo: args.repo ?? 'owner/name',
+      kind: args.kind ?? 'all',
+      state: args.state ?? 'open',
+      count: 2,
+      items: [
+        {
+          kind: 'issue',
+          number: 101,
+          title: 'Fix broken login',
+          state: 'open',
+          url: 'https://github.com/owner/name/issues/101',
+          author: 'octocat',
+          labels: ['bug', 'P1'],
+          assignees: ['octocat'],
+          comments: 3,
+          createdAt: PANEL_ISO,
+          updatedAt: PANEL_ISO,
+          isPull: false,
+        },
+        {
+          kind: 'pr',
+          number: 102,
+          title: 'Add OAuth login',
+          state: 'open',
+          url: 'https://github.com/owner/name/pull/102',
+          author: 'monalisa',
+          labels: ['feature'],
+          assignees: [],
+          comments: 1,
+          createdAt: PANEL_ISO,
+          updatedAt: PANEL_ISO,
+          draft: false,
+          merged: false,
+          isPull: true,
+        },
+      ],
+    };
+  }
+  if (tool === 'github_dispatch') {
+    if (args.action === 'tick') {
+      return { ok: true, dispatched: true, sessionId: 'session-watcher-1', taskIds: ['T9'], eventIds: ['e9'] };
+    }
+    if (args.action === 'send') {
+      return { ok: true, sessionId: 'session-watcher-1', sent: true };
+    }
+    if (args.action === 'status') {
+      return {
+        ok: true,
+        enabled: true,
+        sessionId: 'session-watcher-1',
+        lastDispatchAt: PANEL_ISO,
+        count: 9,
+        lastError: null,
+        lastEventAt: PANEL_ISO,
+        seen: 20,
+        skipped: 1,
+      };
+    }
+  }
+  if (tool === 'github_tasks' && args.action === 'create') {
+    return { ok: true, task: { id: 'T42', title: args.title } };
+  }
+  if (tool === 'github_config' && args.action === 'set') {
+    return { ok: true };
+  }
+  return { ok: true };
 }
 
 /**
@@ -728,7 +822,7 @@ function makePanelFetch(snapshot, options = {}) {
     if (route === '/action') {
       const body = JSON.parse(init.body ?? '{}');
       actions.push(body);
-      const result = options.actionResult ? await options.actionResult(body) : { ok: true };
+      const result = options.actionResult ? await options.actionResult(body) : defaultActionResult(body);
       return { ok: true, status: 200, json: async () => ({ ok: true, data: result }) };
     }
     let data;
@@ -1321,6 +1415,191 @@ test('panel starts and finishes the GitHub device flow through POST /action', as
     await clickRenderedButton(panel, '我已完成授权，继续');
     assert.deepEqual(panel.actions[1], { tool: 'github_auth', args: { action: 'poll', timeoutSec: 120 } });
     assert.ok(textOfRendered(panel.tree).includes('登录成功：newuser'));
+  } finally {
+    panel.dispose();
+  }
+});
+
+test('issues tab lists issues and PRs and creates a storyboard task', async () => {
+  const panel = await renderPanel();
+  try {
+    await clickRenderedButton(panel, '议题/PR', (node) => node.props.role === 'tab');
+
+    const issuesCalls = () => panel.actions.filter((entry) => entry.tool === 'github_issues');
+    assert.ok(issuesCalls().length > 0, 'opening the tab should request github_issues');
+    assert.deepEqual(issuesCalls()[0].args, {
+      action: 'list',
+      kind: 'all',
+      state: 'open',
+      limit: 30,
+      repo: 'owner/name',
+    });
+
+    const text = textOfRendered(panel.tree);
+    assert.ok(text.includes('#101'), 'issue number should render');
+    assert.ok(text.includes('Fix broken login'), 'issue title should render');
+    assert.ok(text.includes('#102'), 'PR number should render');
+    assert.ok(text.includes('Add OAuth login'), 'PR title should render');
+    assert.ok(text.includes('作者 octocat'), 'author should render');
+    assert.ok(text.includes('bug') && text.includes('P1'), 'labels should render');
+    assert.ok(text.includes('打开'), 'open state chip should render');
+    const issueLink = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'a' && node.props.href === 'https://github.com/owner/name/issues/101',
+    );
+    assert.ok(issueLink, 'GitHub link should render for the issue');
+
+    // Changing the kind filter refetches with the new argument.
+    const kindSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === 'all');
+    assert.ok(kindSelect, 'kind filter should render');
+    kindSelect.props.onChange({ target: { value: 'pr' } });
+    await panel.settle();
+    const lastIssuesCall = issuesCalls()[issuesCalls().length - 1];
+    assert.equal(lastIssuesCall.args.kind, 'pr');
+
+    // State and limit filters are forwarded as well.
+    const stateSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === 'open');
+    assert.ok(stateSelect, 'state filter should render');
+    stateSelect.props.onChange({ target: { value: 'closed' } });
+    await panel.settle();
+    const limitSelect = findRenderedNode(panel.tree, (node) => node.tag === 'select' && node.props.value === '30');
+    assert.ok(limitSelect, 'limit filter should render');
+    limitSelect.props.onChange({ target: { value: '50' } });
+    await panel.settle();
+    const filteredCall = issuesCalls()[issuesCalls().length - 1];
+    assert.equal(filteredCall.args.state, 'closed');
+    assert.equal(filteredCall.args.limit, 50);
+
+    // "Create task" posts the exact github_tasks create body for that row.
+    const before = panel.actions.length;
+    await clickRenderedButton(panel, '创建任务');
+    const createCall = panel.actions.slice(before).find((entry) => entry.tool === 'github_tasks');
+    assert.ok(createCall, 'create task should post github_tasks');
+    assert.deepEqual(createCall.args, {
+      action: 'create',
+      repo: 'owner/name',
+      title: 'Fix broken login',
+      description: 'GitHub issue #101: https://github.com/owner/name/issues/101',
+    });
+    assert.ok(textOfRendered(panel.tree).includes('已创建任务 T42'), 'created task id should be toasted');
+  } finally {
+    panel.dispose();
+  }
+});
+
+test('automation tab shows dispatch status and drives config and dispatch actions', async () => {
+  const opened = [];
+  const uiWorkspace = {
+    openSession(sessionId) {
+      opened.push(sessionId);
+    },
+  };
+  const panel = await renderPanel({
+    ctxExtra: {
+      inject(deps, callback) {
+        callback({ sessions: null, uiWorkspace });
+      },
+    },
+  });
+  try {
+    await clickRenderedButton(panel, '自动化', (node) => node.props.role === 'tab');
+
+    const statusText = textOfRendered(panel.tree);
+    assert.ok(statusText.includes('自动派发'), 'auto dispatch section should render');
+    assert.ok(statusText.includes('派发状态'), 'dispatch status section should render');
+    assert.ok(statusText.includes('session-watcher-1'), 'watcher session id should render');
+    assert.ok(statusText.includes('派发次数: 3'), 'dispatch count should render');
+    assert.ok(statusText.includes('已开启'), 'enabled state should render');
+
+    const toggle = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'input' && node.props.type === 'checkbox' && node.props['aria-label'] === '始终开启自动派发',
+    );
+    assert.ok(toggle, 'auto dispatch toggle should render');
+    toggle.props.onChange({ target: { checked: false } });
+    await panel.settle();
+    assert.ok(textOfRendered(panel.tree).includes('已关闭'), 'disabled state should render');
+
+    const reviewKind = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'input' && node.props.type === 'checkbox' && node.props['aria-label'] === '监听的类型: 评审',
+    );
+    assert.ok(reviewKind, 'review kind checkbox should render');
+    reviewKind.props.onChange({ target: { checked: false } });
+    await panel.settle();
+    const pushKind = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'input' && node.props.type === 'checkbox' && node.props['aria-label'] === '监听的类型: 推送',
+    );
+    assert.ok(pushKind, 'push kind checkbox should render');
+    pushKind.props.onChange({ target: { checked: true } });
+    await panel.settle();
+
+    const intervalInput = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'input' && node.props.type === 'number' && String(node.props.value) === '120',
+    );
+    assert.ok(intervalInput, 'min interval input should render');
+    intervalInput.props.onChange({ target: { value: '300' } });
+    await panel.settle();
+
+    await clickRenderedButton(panel, '保存', (node) => node.props.disabled !== true);
+    const configCall = panel.actions.filter((entry) => entry.tool === 'github_config').pop();
+    assert.ok(configCall, 'saving automation should post github_config action=set');
+    assert.deepEqual(configCall.args, {
+      action: 'set',
+      autoDispatch: false,
+      autoDispatchKinds: ['issue', 'pr', 'push'],
+      autoDispatchMinIntervalSec: 300,
+    });
+
+    await clickRenderedButton(panel, '立即检查一次');
+    const tickCall = panel.actions.filter((entry) => entry.tool === 'github_dispatch' && entry.args.action === 'tick').pop();
+    assert.ok(tickCall, 'run check should post github_dispatch action=tick');
+    assert.ok(textOfRendered(panel.tree).includes('已派发 1 条事件到 watcher'), 'dispatch result should be toasted');
+
+    await clickRenderedButton(panel, '刷新状态');
+    const statusCall = panel.actions.filter((entry) => entry.tool === 'github_dispatch' && entry.args.action === 'status').pop();
+    assert.ok(statusCall, 'refresh status should post github_dispatch action=status');
+    assert.ok(textOfRendered(panel.tree).includes('派发次数: 9'), 'refreshed status should render');
+
+    await clickRenderedButton(panel, '打开 watcher 会话');
+    assert.deepEqual(opened, ['session-watcher-1'], 'openSession should receive the watcher session id');
+
+    const sendArea = findRenderedNode(
+      panel.tree,
+      (node) => node.tag === 'textarea' && node.props['aria-label'] === '直接发送给 watcher',
+    );
+    assert.ok(sendArea, 'send-to-watcher textarea should render');
+    sendArea.props.onChange({ target: { value: '处理最新 review' } });
+    await panel.settle();
+    await clickRenderedButton(panel, '发送');
+    const sendCall = panel.actions.filter((entry) => entry.tool === 'github_dispatch' && entry.args.action === 'send').pop();
+    assert.ok(sendCall, 'send should post github_dispatch action=send');
+    assert.deepEqual(sendCall.args, { action: 'send', text: '处理最新 review' });
+    assert.ok(textOfRendered(panel.tree).includes('已发送到会话 session-watcher-1'), 'send result should be toasted');
+  } finally {
+    panel.dispose();
+  }
+});
+
+test('issues and automation tabs render English copy', async () => {
+  const panel = await renderPanel({ locale: 'en' });
+  try {
+    await clickRenderedButton(panel, 'Issues/PRs', (node) => node.props.role === 'tab');
+    const issuesText = textOfRendered(panel.tree);
+    assert.ok(issuesText.includes('Reads issues and pull requests directly'));
+    assert.ok(issuesText.includes('Create task'));
+    assert.ok(issuesText.includes('by octocat'));
+    assert.ok(issuesText.includes('Fix broken login'));
+
+    await clickRenderedButton(panel, 'Automation', (node) => node.props.role === 'tab');
+    const automationText = textOfRendered(panel.tree);
+    assert.ok(automationText.includes('Auto dispatch'));
+    assert.ok(automationText.includes('Watcher session'));
+    assert.ok(automationText.includes('Run check now'));
+    assert.ok(automationText.includes('Send to watcher'));
+    assert.ok(automationText.includes('Dispatch status'));
   } finally {
     panel.dispose();
   }

@@ -102,9 +102,27 @@ function createRuntime(opts) {
     meta: null,
     pending: null,
   };
+  const dispatchState = {
+    enabled: false,
+    sessionId: null,
+    lastDispatchAt: null,
+    count: 0,
+    lastError: null,
+    lastEventAt: null,
+    seen: 0,
+    skipped: 0,
+  };
   const runtime = {
     storyboard,
     poller,
+    client: {
+      async get(path) {
+        return { status: 200, data: [], path };
+      },
+      async paginate() {
+        return [];
+      },
+    },
     events: new EventStore(path.join(stateDir, 'events.json')),
     tasks: new TaskStore(path.join(stateDir, 'tasks.json')),
     getConfig: () => config,
@@ -117,6 +135,13 @@ function createRuntime(opts) {
     tokenInfo: () => ({ hasToken: authState.hasToken, source: authState.source }),
     pollerStatus() {
       return { running: false, intervalSec: config.pollIntervalSec, token: authState.hasToken, tokenSource: authState.source, watermarks: {} };
+    },
+    dispatchStatus: () => ({ ...dispatchState }),
+    async dispatchTick() {
+      return { dispatched: false, reason: 'no-events' };
+    },
+    async dispatchSend(text) {
+      return { sessionId: 'session-watcher-test', sent: true, text };
     },
     oauthStatus() {
       return {
@@ -181,10 +206,20 @@ async function commitFile(dir, name, content, message) {
 }
 
 describe('tool surface', () => {
-  it('exposes seven tools with model-facing schemas and output rendering', () => {
+  it('exposes nine tools with model-facing schemas and output rendering', () => {
     const { runtime } = createRuntime({ root: tempDir('gos-tools-') });
     const tools = toolMap(runtime);
-    assert.deepEqual(Object.keys(tools).sort(), ['git_sync', 'git_worktree', 'github_auth', 'github_config', 'github_events', 'github_repos', 'github_tasks']);
+    assert.deepEqual(Object.keys(tools).sort(), [
+      'git_sync',
+      'git_worktree',
+      'github_auth',
+      'github_config',
+      'github_dispatch',
+      'github_events',
+      'github_issues',
+      'github_repos',
+      'github_tasks',
+    ]);
     for (const tool of Object.values(tools)) {
       assert.equal(typeof tool.name, 'string');
       assert.ok(tool.description.length > 60, `${tool.name} needs a useful description`);
@@ -262,6 +297,30 @@ describe('github_auth', () => {
     const { runtime } = createRuntime({ root: tempDir('gos-auth-none-') });
     const tools = toolMap(runtime);
     await assert.rejects(() => tools.github_auth.execute({ action: 'poll' }, {}), /No pending/);
+  });
+});
+
+describe('github_dispatch', () => {
+  it('reports automation status and forwards tick/send', async () => {
+    const { runtime } = createRuntime({ root: tempDir('gos-dispatch-tool-') });
+    const tools = toolMap(runtime);
+
+    const status = await tools.github_dispatch.execute({ action: 'status' }, {});
+    assert.equal(status.ok, true);
+    assert.equal(status.enabled, false);
+    assert.equal(status.count, 0);
+
+    const tick = await tools.github_dispatch.execute({ action: 'tick' }, {});
+    assert.equal(tick.ok, true);
+    assert.equal(tick.dispatched, false);
+    assert.equal(tick.reason, 'no-events');
+
+    const sent = await tools.github_dispatch.execute({ action: 'send', text: '处理最新 review' }, {});
+    assert.equal(sent.ok, true);
+    assert.equal(sent.sent, true);
+    assert.equal(sent.sessionId, 'session-watcher-test');
+
+    await assert.rejects(() => tools.github_dispatch.execute({ action: 'send' }, {}), /"text" is required/);
   });
 });
 

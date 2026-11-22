@@ -53,15 +53,17 @@ plugin_manager action=install_bundle target=<absolute path to this directory>
 ```
 
 After installation a GitHub branch icon appears in the left sidebar. Click it to
-open the dashboard, or use the seven tools directly:
+open the dashboard, or use the nine tools directly:
 
 | Tool | Purpose |
 | --- | --- |
-| `github_config` | Show/change workspace root, poll interval, base branch, branch prefix, remote, git binary, OAuth client id/scopes |
+| `github_config` | Show/change workspace root, poll interval, base branch, branch prefix, remote, git binary, OAuth client id/scopes and automation fields |
 | `github_auth` | OAuth device-flow sign-in: status / start / poll / cancel / logout |
 | `github_repos` | Add/remove watched repositories; clone/fetch; inspect clone state |
+| `github_issues` | List/show/create/comment on issues and pull requests (the current backlog, not just event deltas) |
 | `github_events` | Read/poll/mark the event inbox; inspect poller watermarks |
 | `github_tasks` | Create/list/update/close tasks; sync task issues and the epic storyboard; import existing issues |
+| `github_dispatch` | Control the always-on dispatcher: status / run a check now / send text to the watcher session |
 | `git_worktree` | Create/list/remove/prune task worktrees |
 | `git_sync` | Fetch, rebase, rebase continue/abort, merge + cleanup, cleanup already-merged worktrees, status |
 
@@ -82,12 +84,18 @@ The sidebar panel contains:
   deletes the stored credential.
 - **Inbox** — unread events with kind chips, repository, branch/PR/issue links
   and the linked task id; mark one or all as read.
+- **Issues/PRs** — the current open/closed issue and pull-request backlog (not
+  only event deltas), filterable by kind, state, repository and limit, with a
+  one-click *Create task* per row.
 - **Tasks** — status, branch, issue link, worktree path; sync the storyboard or
   close a task.
 - **Repos** — clone/fetch each watched repository, see base branch and dirty
   state.
 - **Worktrees** — every live task worktree with its branch and dirty state;
   remove one with confirmation.
+- **Automation** — always-on event dispatch: on/off, which event kinds, the
+  minimum interval, the watcher session id, *Run check now*, *Open watcher
+  session* and a textbox to send a chat-style instruction to the watcher.
 - **Settings** — edit the workspace root and poll interval; changes persist
   immediately.
 
@@ -122,6 +130,44 @@ Both paths use the same tools and state (event inbox, tasks, storyboard), so a
 task dispatched from the panel is the same task you can follow from the chat
 and see in the plugin's Tasks tab.
 
+## Always-on automation (Grok-bot mode)
+
+With `autoDispatch` enabled the plugin stops waiting to be asked. On every poll
+cycle the dispatcher:
+
+1. takes newly observed, unread, non-baseline events for the configured kinds
+   (default `issue`, `pr`, `review`),
+2. de-duplicates them against its persisted `dispatch.json` and applies a
+   minimum interval to avoid storms,
+3. creates one local storyboard task per event (`[GitHub] repo#123 title`,
+   linked to the issue/PR number),
+4. delivers a structured instruction prompt to one persistent **watcher
+   session** — creating it on first use and resuming it after restarts — so the
+   agent starts working without a human asking.
+
+The watcher session is an ordinary DSH conversation: open it from the
+Automation tab (or the sidebar) to watch, interrupt, or continue the work. You
+can also type into it directly; the agent has the same plugin tools there. If a
+prompt cannot be delivered the event stays unseen and the next tick retries it;
+the last error is shown in the Automation tab.
+
+Enable it once:
+
+```
+github_config action=set autoDispatch=true autoDispatchKinds=["issue","pr","review"] autoDispatchMinIntervalSec=120
+```
+
+or use the Automation tab's toggle. `github_dispatch action=status` reports the
+watcher session id and last dispatch; `github_dispatch action=tick` runs a check
+on demand; `github_dispatch action=send text="..."` injects a chat-style
+instruction into the same watcher session.
+
+Automation is off by default so installing the plugin never starts model work
+unexpectedly; the panel and `github_config action=set` turn it on per install.
+The watcher agent is created with the configured `autoDispatchAgentPreset`
+(default `standard`), so it receives the normal file/shell/tool set and can
+actually execute work rather than only read GitHub metadata.
+
 ## Configuration
 
 Initial values live in the bundle config (`cordis.patch.yml`):
@@ -138,6 +184,13 @@ Initial values live in the bundle config (`cordis.patch.yml`):
         branchPrefix: 'task/'
         oauthClientId: ''                           # optional own OAuth App
         oauthScopes: 'repo read:user'
+        autoDispatch: false                         # always-on automation (off by default)
+        autoDispatchKinds: ['issue', 'pr', 'review']
+        autoDispatchMinIntervalSec: 120
+        autoDispatchMaxEvents: 5
+        autoDispatchCreateTasks: true
+        autoDispatchTaskStatus: ready
+        autoDispatchAgentPreset: standard
 ```
 
 At runtime, `github_config action=set` (or the panel's Settings tab) persists
@@ -280,6 +333,7 @@ All under `<DSH_HOME>/github-orchestrator/`:
 | `settings.json` | runtime overrides written by `github_config` / `github_repos` |
 | `events.json` | event inbox (capped at `maxEvents`, default 2000) |
 | `events-watermarks.json` | polling watermarks per repository |
+| `dispatch.json` | automation state: seen event ids, watcher session id, last dispatch/error |
 | `tasks.json` | local storyboard tasks and notes |
 
 The OAuth token is **not** in these files: it is stored in the Harness
@@ -308,24 +362,36 @@ re-imported from issue meta blocks with `github_tasks action=import`.
 1. 点侧边栏的 GitHub 图标打开面板，点“使用 GitHub 登录”，按提示在
    `https://github.com/login/device` 输入一次性代码并授权——不需要 SSH，也不用手动粘贴 token。
 2. 在“仓库”页添加并克隆仓库（可多个）；在“设置”页改工作目录。
-3. “收件箱”查看 issue / PR / review / push 事件，可一键标记已读。
-4. 用工具创建任务：`github_tasks action=create repo="owner/name" title="..."`（自动建 issue）。
-5. `git_worktree action=create task=T1` 创建并发 worktree；
+3. “收件箱”看事件增量，“议题/PR”页直接拉取当前 issue / PR 列表（可按 kind、状态、仓库过滤），
+   每行可一键“创建任务”。
+4. 打开“自动化”页：打开 **Always-on auto dispatch**，选择要驱动任务的 event 类型
+   （issue/pr/review）与最小间隔。此后新事件会：
+   自动建任务 → 写入持久 watcher 会话 → Agent 立即开始处理，不需要你再问“有没有事件”。
+   可在该页“打开 watcher 会话”查看/打断，或“立即检查”手动触发一次。
+5. 用工具创建任务：`github_tasks action=create repo="owner/name" title="..."`（自动建 issue）。
+6. `git_worktree action=create task=T1` 创建并发 worktree；
    `git_sync action=rebase task=T1` 跟随主干变基；
    `git_sync action=merge task=T1` 合并后自动清理 worktree、分支、关闭 issue 并刷新故事板。
-6. 任务页可“同步故事板”，仓库页可克隆/拉取，Worktree 页可安全删除。
+7. 任务页可“同步故事板”，仓库页可克隆/拉取，Worktree 页可安全删除；自动化状态可用
+   `github_dispatch action=status` 查看。
 
 ## Verification
 
-`node --test "test/**/*.test.js"` runs **182 tests** covering the Git engine,
-token-authenticated Git, GitHub client, OAuth device flow, event poller, task
-store, storyboard, the tool layer, the Host web API and integration scenarios
-offline (temp repositories, an in-process mock GitHub server and mock fetch).
+`node --test "test/**/*.test.js"` runs **231 tests** covering the Git engine,
+token-authenticated Git, GitHub client, issue/PR listing, OAuth device flow,
+event poller, auto-dispatch engine, task store, storyboard, the tool layer, the
+Host web API and integration scenarios offline (temp repositories, an
+in-process mock GitHub server and mock fetch).
 
 Live checks against the running Harness and GitHub: the client halves register
 as active `sidebar.panellist` / `main` occupants, the loopback API answers
-`/status`, `/events` and `/action` with real data, the device-flow start returns
-a real user code from GitHub, and a private repository cloned through the plugin
-with the token alone (no SSH, no credential helper) — with no token written to
-`.git/config`. The rendered panel layout is exercised by the offline React
-harness in `test/web.test.js`; visual inspection in the page was not automated.
+`/status`, `/events` and `/action` with real data, `github_issues` lists the
+real open issues/PRs of `hitzhangjie/golang-debugger-book`, the device-flow
+start returns a real user code, and a private repository cloned through the
+plugin with the token alone (no SSH, no credential helper) — with no token
+written to `.git/config`. The always-on path was exercised end to end: a
+synthetic event was observed by the dispatcher, a storyboard task was created,
+the watcher session was created with its preset tools, and the agent read the
+event, marked it handled, closed the task and stopped. The rendered panel
+layout is exercised by the offline React harness in `test/web.test.js`; visual
+inspection in the page was not automated.

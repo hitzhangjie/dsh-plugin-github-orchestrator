@@ -27,13 +27,14 @@ import { GitHubClient, resolveGitHubToken, CREDENTIAL_KEY } from './lib/github.j
 import { EventStore, EventPoller } from './lib/events.js';
 import { TaskStore } from './lib/tasks.js';
 import { Storyboard } from './lib/storyboard.js';
+import { AutoDispatcher } from './lib/dispatch.js';
 import { createToolDefinitions } from './lib/tools.js';
 import { promptContext } from './lib/prompt.js';
 import { resolveOAuthClientId, startDeviceFlow, pollDeviceFlow, fetchGitHubUser, DeviceFlowError } from './lib/oauth.js';
 import { setGitAuthProvider } from './lib/git.js';
 import { registerWebRoutes } from './lib/web.js';
 
-export const inject = ['tools'];
+export const inject = ['tools', 'agents'];
 
 export const name = 'github-orchestrator';
 
@@ -85,6 +86,89 @@ export async function apply(ctx, rawConfig = {}) {
     logger: ctx.logger,
     pollIntervalSec: config.pollIntervalSec,
     watermarksPath: path.join(stateDir, 'events-watermarks.json'),
+  });
+
+  // The dispatcher turns newly observed GitHub events into storyboard tasks and
+  // prompts in one persistent watcher session, so the agent keeps working
+  // without the human asking. Its `agents` facade adapts the service handles.
+  let defaultModelService = null;
+  try {
+    ctx.inject(['agentDefaultModel'], (modelCtx) => {
+      defaultModelService = modelCtx.agentDefaultModel;
+    });
+  } catch {
+    defaultModelService = null;
+  }
+  const resolveAgentOptions = () => {
+    try {
+      const selection = defaultModelService?.currentSelection?.();
+      if (selection && selection.provider && selection.model) {
+        return {
+          provider: selection.provider,
+          model: selection.model,
+          ...(selection.reasoningEffort ? { reasoningEffort: selection.reasoningEffort } : {}),
+        };
+      }
+    } catch {
+      /* fall back to the deployment default model selection */
+    }
+    return undefined;
+  };
+  // Preset tools (write/bash/fs/...) are mounted per agent; programmatic
+  // creation must mount the configured preset into the new agent's scope.
+  let presetService = null;
+  try {
+    ctx.inject(['agentPresets'], (presetCtx) => {
+      presetService = presetCtx.agentPresets;
+    });
+  } catch {
+    presetService = null;
+  }
+  const resolveSetup = () => {
+    const preset = config.autoDispatchAgentPreset;
+    if (!preset || !presetService || typeof presetService.mount !== 'function') return undefined;
+    return async (agentCtx) => {
+      await presetService.mount(agentCtx, preset);
+    };
+  };
+  const agentFacade = {
+    get(id) {
+      try {
+        return ctx.agents.get(id);
+      } catch {
+        return undefined;
+      }
+    },
+    async create(options) {
+      const preset = config.autoDispatchAgentPreset;
+      const setup = options.setup ?? resolveSetup();
+      const handle = await ctx.agents.create({
+        ...options,
+        meta: {
+          ...(options.meta ?? {}),
+          ...(preset ? { agentPreset: preset } : {}),
+        },
+        agentOptions: options.agentOptions ?? resolveAgentOptions(),
+        ...(setup ? { setup } : {}),
+      });
+      return handle.agent;
+    },
+    async resume(options) {
+      const setup = options.setup ?? resolveSetup();
+      const handle = await ctx.agents.resume({
+        ...options,
+        agentOptions: options.agentOptions ?? resolveAgentOptions(),
+        ...(setup ? { setup } : {}),
+      });
+      return handle.agent;
+    },
+  };
+  const dispatcher = new AutoDispatcher({
+    config,
+    tasks,
+    agents: agentFacade,
+    statePath: path.join(stateDir, 'dispatch.json'),
+    logger: ctx.logger,
   });
 
   /** Current token and the metadata recorded when it was obtained via OAuth. */
@@ -263,6 +347,42 @@ export async function apply(ctx, rawConfig = {}) {
     watermarks: poller.watermarks(),
   });
 
+  const dispatchStatus = () => {
+    const status = dispatcher.status();
+    try {
+      const agent = status.sessionId ? ctx.agents.get(status.sessionId) : undefined;
+      return { ...status, agentLive: Boolean(agent), agentStatus: agent?.status ?? null };
+    } catch {
+      return { ...status, agentLive: false, agentStatus: null };
+    }
+  };
+  const dispatchTick = async () => {
+    const unread = events.list({ unreadOnly: true, limit: Math.max(50, config.autoDispatchMaxEvents * 4) });
+    return dispatcher.handleEvents(unread);
+  };
+  const dispatchSend = async (text) => dispatcher.sendToWatcher(text);
+
+  let dispatchTimer = null;
+  const clearDispatchTimer = () => {
+    if (dispatchTimer) {
+      clearInterval(dispatchTimer);
+      dispatchTimer = null;
+    }
+  };
+  const startDispatchTimer = () => {
+    if (dispatchTimer || !config.autoDispatch) return;
+    dispatchTimer = setInterval(() => {
+      void dispatchTick().catch((error) => {
+        ctx.logger?.warn?.(`[github-orchestrator] dispatch tick failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }, Math.max(15, config.pollIntervalSec) * 1000);
+    dispatchTimer.unref?.();
+  };
+  const restartDispatchTimer = () => {
+    clearDispatchTimer();
+    startDispatchTimer();
+  };
+
   const toolMap = {};
   let runtime;
   const invokeTool = async (toolName, args) => {
@@ -312,6 +432,16 @@ export async function apply(ctx, rawConfig = {}) {
       worktrees: Array.isArray(worktrees?.repos) ? worktrees.repos : [],
       auth: oauthStatus(),
       web: runtime.webStatus(),
+      autoDispatch: {
+        enabled: config.autoDispatch,
+        kinds: config.autoDispatchKinds,
+        minIntervalSec: config.autoDispatchMinIntervalSec,
+        maxEvents: config.autoDispatchMaxEvents,
+        createTasks: config.autoDispatchCreateTasks,
+        taskStatus: config.autoDispatchTaskStatus,
+        sessionId: config.autoDispatchSessionId || null,
+      },
+      dispatch: dispatchStatus(),
       poller: pollerSnapshot,
     };
   };
@@ -323,7 +453,14 @@ export async function apply(ctx, rawConfig = {}) {
       config = normalizeConfig(rawConfig, saved, { env, homeDir });
       poller.updateConfig(config);
       storyboard.updateConfig(config);
+      dispatcher.updateConfig(config);
       startPoller();
+      restartDispatchTimer();
+      if (config.autoDispatch) {
+        void dispatchTick().catch((error) => {
+          ctx.logger?.warn?.(`[github-orchestrator] dispatch tick failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }
       return config;
     },
     client,
@@ -338,6 +475,9 @@ export async function apply(ctx, rawConfig = {}) {
     oauthPoll,
     oauthCancel,
     oauthLogout,
+    dispatchStatus,
+    dispatchTick,
+    dispatchSend,
     snapshot,
     invokeTool,
   };
@@ -398,9 +538,16 @@ export async function apply(ctx, rawConfig = {}) {
   });
 
   startPoller();
+  startDispatchTimer();
+  if (config.autoDispatch) {
+    void dispatchTick().catch((error) => {
+      ctx.logger?.warn?.(`[github-orchestrator] initial dispatch tick failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
   ctx.effect(
     () => () => {
       stopPoller();
+      clearDispatchTimer();
       setGitAuthProvider(null);
     },
     'github-orchestrator: poller',

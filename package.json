@@ -1,8 +1,8 @@
 {
   "name": "@hitzhangjie/dsh-plugin-github-orchestrator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "GitHub event watcher and worktree orchestrator for DeepSeek Harness: an in-app panel and OAuth sign-in, issues/pull requests/reviews/pushes followed into an inbox, concurrent tasks in Git worktrees, rebase/merge/cleanup, and a storyboard kept in GitHub issues.",
+  "description": "GitHub event watcher and worktree orchestrator for DeepSeek Harness: an in-app panel and OAuth sign-in, an issue/PR backlog, always-on event dispatch into a watcher agent session, concurrent tasks in Git worktrees, rebase/merge/cleanup, and a storyboard kept in GitHub issues.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -46,7 +46,8 @@
     "README.md",
     "LICENSE",
     "CONTRACT.md",
-    "SPEC-V2.md"
+    "SPEC-V2.md",
+    "SPEC-V3.md"
   ],
   "scripts": {
     "check": "node --check index.js && node --check lib/tools.js && node --check client.js && node -e \"import('./index.js').then(()=>console.log('esm ok'))\"",
