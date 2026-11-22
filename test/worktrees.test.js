@@ -39,7 +39,7 @@ const TEST_ENV = {
 };
 
 function git(cwd, ...args) {
-  return execFileSync(GIT, args, {
+  return execFileSync(GIT, ['-c', 'core.autocrlf=false', ...args], {
     cwd,
     env: TEST_ENV,
     encoding: 'utf8',

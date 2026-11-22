@@ -52,7 +52,9 @@ const TEST_ENV = {
 
 /** Direct git invocation used only to build fixtures and verify results. */
 function git(cwd, ...args) {
-  return execFileSync(GIT, args, {
+  // Force LF checkouts regardless of the machine's global core.autocrlf; the
+  // plugin's canonical fixtures are LF and must stay clean after `git clone`.
+  return execFileSync(GIT, ['-c', 'core.autocrlf=false', ...args], {
     cwd,
     env: TEST_ENV,
     encoding: 'utf8',

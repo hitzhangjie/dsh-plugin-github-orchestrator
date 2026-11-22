@@ -53,7 +53,7 @@ const GIT_ENV = {
 
 /** Run raw git for fixture setup; throws on non-zero exit. */
 async function git(cwd, ...args) {
-  const { stdout } = await execFileAsync('git', args, { cwd, env: GIT_ENV });
+  const { stdout } = await execFileAsync('git', ['-c', 'core.autocrlf=false', ...args], { cwd, env: GIT_ENV });
   return stdout.trim();
 }
 

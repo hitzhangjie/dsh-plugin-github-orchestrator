@@ -375,7 +375,7 @@ describe('git worktree + merge lifecycle through tools', () => {
     await commitFile(seed, 'README.md', '# demo\n', 'initial');
     await gitOk(['remote', 'add', 'origin', origin], { cwd: seed });
     await gitOk(['push', '-u', 'origin', 'main'], { cwd: seed });
-    await gitOk(['clone', origin, clone], { cwd: root });
+    await gitOk(['-c', 'core.autocrlf=false', 'clone', origin, clone], { cwd: root });
     await gitOk(['config', 'user.email', 'test@example.test'], { cwd: clone });
     await gitOk(['config', 'user.name', 'Test User'], { cwd: clone });
 
@@ -424,7 +424,7 @@ describe('git worktree + merge lifecycle through tools', () => {
     await commitFile(seed, 'file.txt', 'base\n', 'initial');
     await gitOk(['remote', 'add', 'origin', origin], { cwd: seed });
     await gitOk(['push', '-u', 'origin', 'main'], { cwd: seed });
-    await gitOk(['clone', origin, clone], { cwd: root });
+    await gitOk(['-c', 'core.autocrlf=false', 'clone', origin, clone], { cwd: root });
     await gitOk(['config', 'user.email', 'test@example.test'], { cwd: clone });
     await gitOk(['config', 'user.name', 'Test User'], { cwd: clone });
 
