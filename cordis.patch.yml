@@ -22,6 +22,9 @@
         # https://github.com/settings/developers and enable device flow.
         oauthClientId: ''
         oauthScopes: 'repo read:user'
+        # Mirror tasks to GitHub issues and keep one epic issue per repository.
+        # Set false to keep tasks local when GitHub issues/PRs already track work.
+        storyboard: true
         # Always-on automation: newly observed events become storyboard tasks and
         # prompts in a persistent watcher session. Off by default; enable with
         # github_config action=set autoDispatch=true or the panel's Automation tab.

@@ -24,9 +24,10 @@ workbench:
    (conflicts are reported, not forced), merge it into the base branch in the
    main clone, then remove the worktree, delete the branch, close the task and
    update the storyboard.
-6. **Keep a storyboard in GitHub issues** — every task is mirrored to an issue;
-   a single per-repository epic issue is reused (even when closed), reconciled
-   with the task table and status counts, and duplicate epics are closed
+6. **Optional storyboard memory** — when enabled, every task is mirrored to an
+   issue; a single per-repository epic issue is reused (even when closed),
+   reconciled with the task table and status counts, and duplicate epics are
+   closed
    counts. The local task store is the fast cache, GitHub issues are the durable
    shared memory.
 
@@ -195,6 +196,7 @@ Initial values live in the bundle config (`cordis.patch.yml`):
         branchPrefix: 'task/'
         oauthClientId: ''                           # optional own OAuth App
         oauthScopes: 'repo read:user'
+        storyboard: true                            # false => tasks stay local, no task issues/epic
         autoDispatch: false                         # always-on automation (off by default)
         autoDispatchKinds: ['issue', 'pr', 'review']
         autoDispatchMinIntervalSec: 120
@@ -209,6 +211,13 @@ overrides to `<DSH_HOME>/github-orchestrator/settings.json`; the patch file is
 never rewritten. `github_repos action=add|remove` stores the watched repository
 list the same way. Changing the workspace root creates the directory
 immediately.
+
+`storyboard: false` (`github_config action=set storyboard=false`) turns off the
+GitHub-backed task memory: `github_tasks create` no longer writes a task issue,
+updates/closes make no GitHub writes, and no epic issue is maintained. Tasks
+stay in the local store; explicit `github_tasks sync|import|bootstrap`, or
+`createIssue: true` on a create, still talk to GitHub on demand. This is the
+right mode when you already track work with your own issues and pull requests.
 
 The workspace layout is:
 
@@ -390,7 +399,7 @@ re-imported from issue meta blocks with `github_tasks action=import`.
 
 ## Verification
 
-`node --test "test/**/*.test.js"` runs **234 tests** covering the Git engine,
+`node --test "test/**/*.test.js"` runs **235 tests** covering the Git engine,
 token-authenticated Git, GitHub client, issue/PR listing, OAuth device flow,
 event poller, auto-dispatch engine, task store, storyboard, the tool layer, the
 Host web API and integration scenarios offline (temp repositories, an

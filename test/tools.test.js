@@ -77,6 +77,7 @@ function createRuntime(opts) {
     workspaceRoot: path.join(root, 'workspace'),
     repos: opts.repos ?? [],
     pollIntervalSec: 120,
+    ...(opts.storyboardEnabled === false ? { storyboard: false } : {}),
   };
   let config = normalizeConfig(rawConfig, {}, { env: { DSH_HOME: root }, homeDir: root });
   const storyboard = opts.storyboard ?? fakeStoryboard();
@@ -250,6 +251,11 @@ describe('github_config', () => {
     assert.equal(fs.existsSync(newWorkspace), true);
     assert.equal(updated.token.available, true);
     assert.equal(updated.workspaceExists, true);
+    assert.equal(updated.storyboard, true);
+
+    const noStoryboard = await tools.github_config.execute({ action: 'set', storyboard: false }, {});
+    assert.equal(noStoryboard.storyboard, false);
+    assert.equal((await tools.github_config.execute({ action: 'show' }, {})).storyboard, false);
   });
 });
 
@@ -417,6 +423,24 @@ describe('github_tasks', () => {
     assert.equal(created.task.issueNumber, undefined);
     assert.equal(created.warnings.some((warning) => /No GitHub token/.test(warning)), true);
     assert.equal(storyboard.calls.length, 0);
+  });
+
+  it('keeps tasks local when the storyboard is disabled', async () => {
+    const { runtime, storyboard } = createRuntime({ root: tempDir('gos-tasks-local-'), repos: ['o/r'], storyboardEnabled: false });
+    const tools = toolMap(runtime);
+    const created = await tools.github_tasks.execute({ action: 'create', repo: 'o/r', title: 'Local only' }, {});
+    assert.equal(created.ok, true);
+    assert.equal(created.task.issueNumber, undefined);
+    await tools.github_tasks.execute({ action: 'update', id: created.task.id, status: 'in_progress' }, {});
+    await tools.github_tasks.execute({ action: 'close', id: created.task.id }, {});
+    assert.deepEqual(storyboard.calls, [], 'disabled storyboard must not touch GitHub issues');
+
+    const explicit = await tools.github_tasks.execute(
+      { action: 'create', repo: 'o/r', title: 'Explicit issue', createIssue: true },
+      {},
+    );
+    assert.equal(explicit.task.issueNumber, 11);
+    assert.ok(storyboard.calls.some((call) => call.op === 'createIssue'));
   });
 });
 
